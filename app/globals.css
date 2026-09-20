@@ -1,0 +1,520 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@source "../components";
+@source "../app";
+@source "../lib";
+
+/* ================================================================
+   LifePlan Design System — Global CSS
+   Black + Dark Green + Emerald theme
+   Tailwind CSS v4 with CSS-based configuration
+   ================================================================ */
+
+/* ─── Design Tokens ─────────────────────────────────────────────── */
+:root {
+  /* Background scale */
+  --background:        #050806;
+  --surface:           #0B110E;
+  --surface-elevated:  #101A15;
+  --surface-card:      #0D1611;
+  --surface-hover:     #131F19;
+  --surface-border:    #1A2E23;
+
+  /* Green scale */
+  --green-900:   #021A10;
+  --green-800:   #063B28;
+  --green-700:   #0B5535;
+  --green-600:   #0B6B45;
+  --green-500:   #0F8C5C;
+  --green-400:   #19D98A;
+  --green-300:   #3EE8A2;
+  --green-200:   #63F2B0;
+  --green-100:   #A8F7D4;
+  --green-50:    #D4FDF0;
+
+  /* Primary colors */
+  --primary:        #19D98A;
+  --primary-light:  #63F2B0;
+  --primary-dark:   #0B6B45;
+  --primary-glow:   rgba(25, 217, 138, 0.15);
+
+  /* Text colors */
+  --text-primary:    #F5FFF9;
+  --text-secondary:  #9AAFA5;
+  --text-muted:      #60756C;
+  --text-disabled:   #3D5248;
+
+  /* Semantic colors */
+  --danger:          #E05252;
+  --danger-muted:    #3D1515;
+  --danger-bg:       rgba(224, 82, 82, 0.1);
+  --warning:         #E09B35;
+  --warning-muted:   #3D2A0A;
+  --warning-bg:      rgba(224, 155, 53, 0.1);
+  --success:         #19D98A;
+  --success-bg:      rgba(25, 217, 138, 0.1);
+
+  /* Borders */
+  --border:          rgba(255, 255, 255, 0.06);
+  --border-strong:   rgba(255, 255, 255, 0.12);
+  --border-emerald:  rgba(25, 217, 138, 0.2);
+
+  /* Effects */
+  --glow-sm:    0 0 12px rgba(25, 217, 138, 0.2);
+  --glow-md:    0 0 24px rgba(25, 217, 138, 0.25);
+  --glow-lg:    0 0 48px rgba(25, 217, 138, 0.3);
+
+  /* Glass */
+  --glass-bg:      rgba(11, 17, 14, 0.8);
+  --glass-border:  rgba(25, 217, 138, 0.1);
+
+  /* Spacing / Radius */
+  --radius-sm:   6px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
+  --radius-full: 9999px;
+
+  /* Nav heights */
+  --bottom-nav-height: 70px;
+  --top-nav-height: 64px;
+
+  /* Transitions */
+  --transition-fast:   150ms ease;
+  --transition-base:   250ms ease;
+  --transition-slow:   400ms ease;
+}
+
+/* ─── Base Styles ───────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--background);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+/* ─── Tailwind Theme ────────────────────────────────────────────── */
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+
+  /* Colors mapped to Tailwind utilities */
+  --color-background:       #050806;
+  --color-surface:          #0B110E;
+  --color-surface-elevated: #101A15;
+  --color-surface-card:     #0D1611;
+  --color-surface-hover:    #131F19;
+  --color-surface-border:   #1A2E23;
+
+  --color-primary:      #19D98A;
+  --color-primary-dark: #0B6B45;
+  --color-primary-light:#63F2B0;
+
+  --color-text-primary:   #F5FFF9;
+  --color-text-secondary: #9AAFA5;
+  --color-text-muted:     #60756C;
+
+  --color-danger:   #E05252;
+  --color-warning:  #E09B35;
+  --color-success:  #19D98A;
+
+  --color-border:        rgba(255, 255, 255, 0.06);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+  --color-border-emerald:rgba(25, 217, 138, 0.2);
+
+  --color-green-900: #021A10;
+  --color-green-800: #063B28;
+  --color-green-700: #0B5535;
+  --color-green-600: #0B6B45;
+  --color-green-500: #0F8C5C;
+  --color-green-400: #19D98A;
+  --color-green-300: #3EE8A2;
+  --color-green-200: #63F2B0;
+  --color-green-100: #A8F7D4;
+
+  --radius-sm:   6px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
+}
+
+/* ─── Typography ────────────────────────────────────────────────── */
+.text-display {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.text-heading {
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.text-section {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.text-body {
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.text-caption {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.text-money {
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.text-money-sm {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Glass Cards ────────────────────────────────────────────────── */
+.glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-surface {
+  background: rgba(11, 17, 14, 0.6);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ─── Emerald Gradient ───────────────────────────────────────────── */
+.emerald-gradient {
+  background: linear-gradient(135deg, var(--green-800) 0%, var(--green-600) 50%, var(--primary) 100%);
+}
+
+.emerald-glow {
+  box-shadow: var(--glow-md);
+}
+
+.emerald-text {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Card Base ──────────────────────────────────────────────────── */
+.card {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  transition: border-color var(--transition-fast);
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+}
+
+.card-elevated {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+}
+
+/* ─── Progress Bar ───────────────────────────────────────────────── */
+.progress-track {
+  background: var(--surface-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  height: 6px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-fill.warning {
+  background: var(--warning);
+}
+
+.progress-fill.danger {
+  background: var(--danger);
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-border);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ─── Bottom Navigation Safe Area ────────────────────────────────── */
+.bottom-nav-safe {
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+}
+
+/* ─── Safe area padding ──────────────────────────────────────────── */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ─── Touch target minimum size ──────────────────────────────────── */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Shimmer skeleton ───────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-card) 25%,
+    var(--surface-elevated) 50%,
+    var(--surface-card) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* ─── Noise texture overlay ──────────────────────────────────────── */
+.noise-texture::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* ─── Input Styles ───────────────────────────────────────────────── */
+.input-field {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  padding: 0.75rem 1rem;
+  width: 100%;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  outline: none;
+}
+
+.input-field:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.input-field::placeholder {
+  color: var(--text-muted);
+}
+
+/* ─── Button Variants ────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--primary);
+  color: #050806;
+  font-weight: 700;
+  padding: 0.875rem 1.5rem;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.btn-secondary {
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 0.875rem 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  font-size: 0.9375rem;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+}
+
+.btn-secondary:hover {
+  border-color: var(--border-emerald);
+  background: var(--surface-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+
+.btn-ghost:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+/* ─── Page Layout ────────────────────────────────────────────────── */
+.page-container {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 12px) + 12px);
+}
+
+@media (min-width: 1024px) {
+  .page-container {
+    max-width: 100%;
+    padding: 0 1.5rem;
+    padding-bottom: 2rem;
+  }
+}
+
+/* ─── Gradient Backgrounds ───────────────────────────────────────── */
+.bg-hero-gradient {
+  background: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(25, 217, 138, 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 50%, rgba(11, 107, 69, 0.1) 0%, transparent 50%),
+    var(--background);
+}
+
+.bg-card-gradient {
+  background: linear-gradient(145deg, var(--surface-elevated) 0%, var(--surface-card) 100%);
+}
+
+.bg-primary-gradient {
+  background: linear-gradient(135deg, var(--green-700) 0%, var(--green-600) 50%, var(--primary) 100%);
+}
+
+/* ─── Status Colors ──────────────────────────────────────────────── */
+.status-healthy  { color: var(--success); }
+.status-warning  { color: var(--warning); }
+.status-danger   { color: var(--danger);  }
+
+.badge-healthy  { background: var(--success-bg); color: var(--success); }
+.badge-warning  { background: var(--warning-bg); color: var(--warning); }
+.badge-danger   { background: var(--danger-bg);  color: var(--danger);  }
+
+/* ─── Number formatting ──────────────────────────────────────────── */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Divider ────────────────────────────────────────────────────── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+
+/* ─── Focus Ring ─────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ─── Reduced motion ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── PWA standalone mode ────────────────────────────────────────── */
+@media (display-mode: standalone) {
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
