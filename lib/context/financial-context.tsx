@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import {
   UserProfile,
   FinancialProfile,
@@ -14,8 +14,44 @@ import {
   Notification,
   FinancialInsight,
 } from '@/types/database'
+import {
+  calculateSalaryMetrics,
+  calculateDaysToPayday,
+} from '@/lib/finance/salary'
+import {
+  calculateTransactionTotals,
+  aggregateSpendingByCategory,
+  aggregateSpendingByFamily,
+} from '@/lib/finance/transactions'
+import {
+  processBills,
+} from '@/lib/finance/bills'
+import {
+  processGoals,
+  calculateEmergencyFundRunway,
+} from '@/lib/finance/goals'
+import {
+  generateMonthlyPlan,
+} from '@/lib/finance/monthly-plan'
+import {
+  getFinancialStateAction,
+  createTransactionAction,
+  deleteTransactionAction,
+  createBillAction,
+  toggleBillPaidAction,
+  deleteBillAction,
+  createFamilyMemberAction,
+  deleteFamilyMemberAction,
+  createSavingsGoalAction,
+  contributeToGoalAction,
+  deleteSavingsGoalAction,
+  saveFinancialProfileAction,
+  saveUserProfileAction,
+} from '@/app/actions/financial-actions'
+import { useUser as useClerkUser } from '@clerk/nextjs'
+import { isLiveClerk } from '@/components/providers/auth-provider'
 
-// ─── Default Sample Data ───────────────────────────────────────
+// ─── Default Initial State ───────────────────────────────────────
 const defaultUserProfile: UserProfile = {
   id: 'usr_default',
   clerk_user_id: 'user_active',
@@ -108,8 +144,6 @@ const defaultCategories: Category[] = [
 ]
 
 const now = new Date()
-const currentYear = now.getFullYear()
-const currentMonth = now.getMonth() + 1
 const dStr = (dayOffset: number) => {
   const d = new Date()
   d.setDate(d.getDate() - dayOffset)
@@ -123,12 +157,12 @@ const defaultTransactions: Transaction[] = [
     category_id: 'cat_9',
     family_member_id: null,
     type: 'income',
-    amount: 7500,
-    description: 'Monthly Salary - Acme Technologies',
+    amount: 7500.00,
+    description: 'Monthly Salary Credit',
     transaction_date: dStr(1),
     payment_method: 'Direct Deposit',
     receipt_url: null,
-    notes: 'Net salary after tax and 401(k) match',
+    notes: 'Direct wire from employer',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     category: defaultCategories[8],
@@ -139,12 +173,12 @@ const defaultTransactions: Transaction[] = [
     category_id: 'cat_1',
     family_member_id: null,
     type: 'expense',
-    amount: 1800,
-    description: 'Monthly Apartment Lease',
+    amount: 1800.00,
+    description: 'Apartment Lease Payment',
     transaction_date: dStr(2),
-    payment_method: 'ACH Transfer',
+    payment_method: 'Bank Transfer',
     receipt_url: null,
-    notes: 'Includes reserved parking space',
+    notes: 'Monthly fixed housing rent',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     category: defaultCategories[0],
@@ -153,18 +187,17 @@ const defaultTransactions: Transaction[] = [
     id: 'tx_3',
     clerk_user_id: 'user_active',
     category_id: 'cat_2',
-    family_member_id: 'fam_1',
+    family_member_id: null,
     type: 'expense',
-    amount: 182.45,
-    description: 'Whole Foods Market - Weekly Pantry',
+    amount: 182.40,
+    description: 'Organic Groceries & Produce',
     transaction_date: dStr(3),
-    payment_method: 'Apple Pay',
+    payment_method: 'Credit Card',
     receipt_url: null,
-    notes: 'Organic produce, dairy, bakery items',
+    notes: 'Weekly fresh groceries',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     category: defaultCategories[1],
-    family_member: defaultFamilyMembers[0],
   },
   {
     id: 'tx_4',
@@ -173,11 +206,11 @@ const defaultTransactions: Transaction[] = [
     family_member_id: 'fam_2',
     type: 'expense',
     amount: 350.00,
-    description: "Leo's Grade 2 Tuition & Books",
+    description: "Leo's Grade 2 School Tuition",
     transaction_date: dStr(4),
     payment_method: 'Debit Card',
     receipt_url: null,
-    notes: 'Term fee and reading materials',
+    notes: 'Monthly academic term fee',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     category: defaultCategories[4],
@@ -189,12 +222,12 @@ const defaultTransactions: Transaction[] = [
     category_id: 'cat_4',
     family_member_id: null,
     type: 'expense',
-    amount: 72.80,
-    description: 'Chevron Fuel Station - Full Tank',
+    amount: 72.00,
+    description: 'Family Vehicle Fuel & Tolls',
     transaction_date: dStr(5),
-    payment_method: 'Credit Card',
+    payment_method: 'Apple Pay',
     receipt_url: null,
-    notes: 'Weekly commuter tank',
+    notes: 'Gas tank refill',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     category: defaultCategories[3],
@@ -202,115 +235,18 @@ const defaultTransactions: Transaction[] = [
   {
     id: 'tx_6',
     clerk_user_id: 'user_active',
-    category_id: 'cat_10',
-    family_member_id: null,
-    type: 'income',
-    amount: 950.00,
-    description: 'Design Consulting - FinTech Client',
-    transaction_date: dStr(6),
-    payment_method: 'Wire Transfer',
-    receipt_url: null,
-    notes: 'Mobile design sprints and audit',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    category: defaultCategories[9],
-  },
-  {
-    id: 'tx_7',
-    clerk_user_id: 'user_active',
-    category_id: 'cat_3',
-    family_member_id: null,
-    type: 'expense',
-    amount: 145.20,
-    description: 'Electric & Gas Utility Bill',
-    transaction_date: dStr(7),
-    payment_method: 'Autopay',
-    receipt_url: null,
-    notes: 'Summer power usage billing cycle',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    category: defaultCategories[2],
-  },
-  {
-    id: 'tx_8',
-    clerk_user_id: 'user_active',
-    category_id: 'cat_5',
-    family_member_id: 'fam_3',
-    type: 'expense',
-    amount: 120.00,
-    description: "Maya's Pre-school Art & Ballet Class",
-    transaction_date: dStr(8),
-    payment_method: 'Credit Card',
-    receipt_url: null,
-    notes: 'Monthly weekend activity sessions',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    category: defaultCategories[4],
-    family_member: defaultFamilyMembers[2],
-  },
-  {
-    id: 'tx_9',
-    clerk_user_id: 'user_active',
-    category_id: 'cat_7',
-    family_member_id: null,
-    type: 'expense',
-    amount: 350.00,
-    description: 'Auto Loan Financing Installment',
-    transaction_date: dStr(9),
-    payment_method: 'Bank Transfer',
-    receipt_url: null,
-    notes: 'Monthly fixed loan repayment',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    category: defaultCategories[6],
-  },
-  {
-    id: 'tx_10',
-    clerk_user_id: 'user_active',
     category_id: 'cat_11',
     family_member_id: null,
     type: 'transfer',
     amount: 600.00,
     description: 'Emergency Reserve Monthly Deposit',
-    transaction_date: dStr(10),
+    transaction_date: dStr(6),
     payment_method: 'Auto-transfer',
     receipt_url: null,
     notes: 'High yield savings transfer',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     category: defaultCategories[10],
-  },
-  {
-    id: 'tx_11',
-    clerk_user_id: 'user_active',
-    category_id: 'cat_2',
-    family_member_id: null,
-    type: 'expense',
-    amount: 64.30,
-    description: "Trader Joe's Snack Restock",
-    transaction_date: dStr(11),
-    payment_method: 'Apple Pay',
-    receipt_url: null,
-    notes: 'School lunch snacks and fruit',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    category: defaultCategories[1],
-  },
-  {
-    id: 'tx_12',
-    clerk_user_id: 'user_active',
-    category_id: 'cat_8',
-    family_member_id: null,
-    type: 'expense',
-    amount: 88.50,
-    description: 'Family Italian Trattoria Dinner',
-    transaction_date: dStr(12),
-    payment_method: 'Credit Card',
-    receipt_url: null,
-    notes: 'Friday night family celebration',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    category: defaultCategories[7],
   },
 ]
 
@@ -352,16 +288,16 @@ const defaultBills: Bill[] = [
   {
     id: 'bill_3',
     clerk_user_id: 'user_active',
-    name: 'Gigabit Fiber Internet',
+    name: 'High-Speed Fiber Internet',
     amount: 85,
-    due_date: 24,
+    due_date: 15,
     recurring: true,
     recurrence_type: 'monthly',
     category_id: 'cat_3',
     status: 'pending',
     paid_at: null,
     reminder_enabled: true,
-    notes: 'Home office internet fiber plan',
+    notes: 'Home gigabit connection',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     category: defaultCategories[2],
@@ -369,110 +305,49 @@ const defaultBills: Bill[] = [
   {
     id: 'bill_4',
     clerk_user_id: 'user_active',
-    name: 'Comprehensive Health Cover',
+    name: 'Family Health Insurance',
     amount: 280,
-    due_date: 26,
+    due_date: 5,
     recurring: true,
     recurrence_type: 'monthly',
     category_id: 'cat_6',
-    status: 'pending',
-    paid_at: null,
+    status: 'paid',
+    paid_at: dStr(6),
     reminder_enabled: true,
-    notes: 'Family dental and health insurance policy',
+    notes: 'Comprehensive medical coverage',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     category: defaultCategories[5],
   },
-  {
-    id: 'bill_5',
-    clerk_user_id: 'user_active',
-    name: 'Auto Loan Repayment',
-    amount: 350,
-    due_date: 28,
-    recurring: true,
-    recurrence_type: 'monthly',
-    category_id: 'cat_7',
-    status: 'pending',
-    paid_at: null,
-    reminder_enabled: true,
-    notes: 'Financing credit union automatic debit',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    category: defaultCategories[6],
-  },
-  {
-    id: 'bill_6',
-    clerk_user_id: 'user_active',
-    name: 'Netflix & Media Cloud',
-    amount: 34.99,
-    due_date: 29,
-    recurring: true,
-    recurrence_type: 'monthly',
-    category_id: 'cat_8',
-    status: 'pending',
-    paid_at: null,
-    reminder_enabled: true,
-    notes: 'Family 4K plan with Apple bundle',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    category: defaultCategories[7],
-  },
 ]
 
+const currentYear = now.getFullYear()
 const defaultSavingsGoals: SavingsGoal[] = [
   {
     id: 'goal_1',
     clerk_user_id: 'user_active',
-    name: 'Emergency Fund (6 Months)',
+    name: 'Emergency Fund (6 Mos)',
     target_amount: 25000,
     current_amount: 18400,
     deadline: `${currentYear}-12-31`,
     icon: 'ShieldCheck',
     color: '#19D98A',
     status: 'active',
-    notes: '6 months of living expenses safely deposited in high-yield account',
+    notes: 'Liquid safety runway for mortgage, food & utilities',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },
   {
     id: 'goal_2',
     clerk_user_id: 'user_active',
-    name: 'Family Summer Trip to Alps',
+    name: 'Family Summer Vacation',
     target_amount: 4500,
-    current_amount: 3250,
-    deadline: `${currentYear}-08-15`,
+    current_amount: 3150,
+    deadline: `${currentYear + 1}-06-30`,
     icon: 'Plane',
     color: '#3EE8A2',
     status: 'active',
-    notes: 'Flight tickets, chalets, and excursions',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'goal_3',
-    clerk_user_id: 'user_active',
-    name: 'Kids University Reserve',
-    target_amount: 50000,
-    current_amount: 14800,
-    deadline: `${currentYear + 8}-09-01`,
-    icon: 'GraduationCap',
-    color: '#63F2B0',
-    status: 'active',
-    notes: '529 education savings plan for Leo & Maya',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'goal_4',
-    clerk_user_id: 'user_active',
-    name: 'Electric SUV Downpayment',
-    target_amount: 12000,
-    current_amount: 8200,
-    deadline: `${currentYear + 1}-03-31`,
-    icon: 'Car',
-    color: '#0F8C5C',
-    status: 'active',
-    notes: 'Zero-emission family vehicle upgrade',
+    notes: '10-day trip to Mediterranean coast',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },
@@ -483,7 +358,7 @@ const defaultNotifications: Notification[] = [
     id: 'notif_1',
     clerk_user_id: 'user_active',
     title: 'Upcoming Bill Reminder',
-    message: 'Electricity & Gas Grid ($145) is due in 2 days on the 22nd.',
+    message: 'Electricity & Gas Grid ($145) is due in 3 days.',
     type: 'bill',
     read: false,
     action_url: '/bills',
@@ -498,16 +373,6 @@ const defaultNotifications: Notification[] = [
     read: false,
     action_url: '/goals',
     created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
-  },
-  {
-    id: 'notif_3',
-    clerk_user_id: 'user_active',
-    title: 'Payday Countdown',
-    message: 'Monthly salary ($7,500) will be credited in 8 days on the 28th.',
-    type: 'info',
-    read: true,
-    action_url: '/home',
-    created_at: new Date(Date.now() - 3600000 * 48).toISOString(),
   },
 ]
 
@@ -530,7 +395,7 @@ const defaultInsights: FinancialInsight[] = [
     id: 'ins_3',
     type: 'tip',
     title: 'Family Spending Optimization',
-    message: 'Children school activities are well within the planned monthly budget of $700.',
+    message: 'Children school activities are well within the planned monthly budget.',
     icon: 'Sparkles',
   },
 ]
@@ -547,6 +412,7 @@ interface FinancialContextType {
   notifications: Notification[]
   insights: FinancialInsight[]
   currentMonthPlan: MonthlyPlan
+  storageMode: 'cloud' | 'local_vault'
   // Computed values
   totalIncome: number
   totalExpenses: number
@@ -556,7 +422,7 @@ interface FinancialContextType {
   emergencyFundMonths: number
   unreadCount: number
   currency: string
-  // Mutators
+  // Operations
   addTransaction: (tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>) => void
   updateTransaction: (id: string, tx: Partial<Transaction>) => void
   deleteTransaction: (id: string) => void
@@ -581,11 +447,13 @@ interface FinancialContextType {
 }
 
 const FinancialContext = createContext<FinancialContextType | null>(null)
-
 const STORAGE_KEY = 'lifeplan_v1_financial_state'
 
 export function FinancialProvider({ children }: { children: React.ReactNode }) {
+  const clerkUser = isLiveClerk ? useClerkUser() : null
   const [isLoaded, setIsLoaded] = useState(false)
+  const [storageMode, setStorageMode] = useState<'cloud' | 'local_vault'>('local_vault')
+
   const [userProfile, setUserProfile] = useState<UserProfile>(defaultUserProfile)
   const [financialProfile, setFinancialProfile] = useState<FinancialProfile>(defaultFinancialProfile)
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>(defaultFamilyMembers)
@@ -595,7 +463,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(defaultSavingsGoals)
   const [notifications, setNotifications] = useState<Notification[]>(defaultNotifications)
 
-  // Load from localStorage on mount
+  // Hydrate from localStorage first, then sync with server action if available
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
@@ -611,13 +479,50 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         if (parsed.notifications) setNotifications(parsed.notifications)
       }
     } catch (e) {
-      console.warn('Could not parse stored LifePlan state, using defaults', e)
+      console.warn('Using default LifePlan state', e)
     } finally {
       setIsLoaded(true)
     }
+
+    // Try cloud sync if Clerk user is signed in
+    async function syncCloud() {
+      try {
+        const res = await getFinancialStateAction()
+        if (res.success && res.data) {
+          setStorageMode('cloud')
+          if (res.data.userProfile) setUserProfile(res.data.userProfile)
+          if (res.data.financialProfile) setFinancialProfile(res.data.financialProfile)
+          if (res.data.transactions?.length) setTransactions(res.data.transactions)
+          if (res.data.bills?.length) setBills(res.data.bills)
+          if (res.data.familyMembers?.length) setFamilyMembers(res.data.familyMembers)
+          if (res.data.savingsGoals?.length) setSavingsGoals(res.data.savingsGoals)
+          if (res.data.categories?.length) setCategories(res.data.categories)
+        } else {
+          setStorageMode('local_vault')
+        }
+      } catch (err) {
+        setStorageMode('local_vault')
+      }
+    }
+
+    syncCloud()
   }, [])
 
-  // Persist to localStorage on change
+  // Sync Clerk user information into profile when signed in
+  useEffect(() => {
+    if (clerkUser?.user) {
+      const u = clerkUser.user
+      setUserProfile((prev) => ({
+        ...prev,
+        clerk_user_id: u.id,
+        full_name: u.fullName || prev.full_name,
+        email: u.primaryEmailAddress?.emailAddress || prev.email,
+        avatar_url: u.imageUrl || prev.avatar_url,
+      }))
+    }
+  }, [clerkUser?.user])
+
+  // Save to local vault
   useEffect(() => {
     if (!isLoaded) return
     try {
@@ -633,7 +538,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave))
     } catch (e) {
-      console.error('Failed to save LifePlan state to localStorage', e)
+      console.error('Failed to save state to localStorage', e)
     }
   }, [
     isLoaded,
@@ -647,64 +552,66 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     notifications,
   ])
 
-  // Computed values
-  const totalIncome = transactions
-    .filter((t) => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0)
+  // Computed Metrics from pure financial engine
+  const totals = calculateTransactionTotals(transactions)
+  const salary = financialProfile.monthly_salary || 7500
+  const salaryMetrics = calculateSalaryMetrics(
+    salary,
+    totals.totalExpenses,
+    totals.totalTransfers,
+    financialProfile.payday || 28
+  )
 
-  const totalExpenses = transactions
-    .filter((t) => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0)
+  const fixedMonthly =
+    Number(financialProfile.rent || 0) +
+    Number(financialProfile.utilities || 0) +
+    Number(financialProfile.debt || 0) +
+    Number(financialProfile.insurance || 0) +
+    Number(financialProfile.groceries || 0)
 
-  const totalSaved = transactions
-    .filter((t) => t.type === 'transfer')
-    .reduce((sum, t) => sum + t.amount, 0)
-
-  const remainingSalary = Math.max(0, (financialProfile.monthly_salary || 7500) - totalExpenses - totalSaved)
-
-  // Days left in current month
-  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate()
-  const currentDay = now.getDate()
-  const daysRemaining = Math.max(1, daysInMonth - currentDay)
-  const safeToSpendDaily = Math.round((remainingSalary / daysRemaining) * 100) / 100
-
-  // Emergency fund calculations (fixed monthly expenses)
-  const monthlyFixed =
-    financialProfile.rent +
-    financialProfile.utilities +
-    financialProfile.debt +
-    financialProfile.insurance +
-    financialProfile.groceries
-  const emergencyGoal = savingsGoals.find((g) => g.id === 'goal_1')
-  const emergencyFundMonths =
-    monthlyFixed > 0 && emergencyGoal ? Math.round((emergencyGoal.current_amount / monthlyFixed) * 10) / 10 : 5.8
+  const emergencyGoal = savingsGoals.find((g) => g.id === 'goal_1') || savingsGoals[0]
+  const emergencyAmount = emergencyGoal ? emergencyGoal.current_amount : 18400
+  const runwayCalc = calculateEmergencyFundRunway(emergencyAmount, fixedMonthly)
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
-  // Current Month Plan
+  // Current Month Plan generated by 50/30/20 engine
+  const planOutput = generateMonthlyPlan({
+    salary,
+    rent: Number(financialProfile.rent || 0),
+    utilities: Number(financialProfile.utilities || 0),
+    groceries: Number(financialProfile.groceries || 0),
+    transportation: Number(financialProfile.transportation || 0),
+    education: Number(financialProfile.education || 0),
+    healthcare: Number(financialProfile.healthcare || 0),
+    debt: Number(financialProfile.debt || 0),
+    insurance: Number(financialProfile.insurance || 0),
+    personal_budget: Number(financialProfile.personal_budget || 0),
+    savings_target: Number(financialProfile.savings_target || 0),
+    emergency_target: Number(financialProfile.emergency_target || 0),
+    familyBudgets: familyMembers.map((m) => ({ name: m.name, amount: m.monthly_budget })),
+    existingBills: bills.map((b) => ({ name: b.name, amount: b.amount, recurring: b.recurring, status: b.status })),
+  })
+
   const currentMonthPlan: MonthlyPlan = {
-    id: `plan_${currentYear}_${currentMonth}`,
+    id: `plan_${now.getFullYear()}_${now.getMonth() + 1}`,
     clerk_user_id: userProfile.clerk_user_id,
-    month: currentMonth,
-    year: currentYear,
-    salary: financialProfile.monthly_salary,
-    total_fixed_expenses: monthlyFixed,
-    total_variable_expenses:
-      financialProfile.education +
-      financialProfile.transportation +
-      financialProfile.personal_budget +
-      financialProfile.healthcare,
-    total_savings: financialProfile.savings_target,
-    emergency_fund: financialProfile.emergency_target,
-    remaining_amount: remainingSalary,
-    notes: 'Balanced 50/30/20 target distribution',
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+    salary: planOutput.salary,
+    total_fixed_expenses: planOutput.totalFixed,
+    total_variable_expenses: planOutput.totalVariable,
+    total_savings: planOutput.totalSavings,
+    emergency_fund: planOutput.emergencyFund,
+    remaining_amount: planOutput.remainingAmount,
+    notes: 'Automated 50/30/20 Plan',
     is_finalized: false,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }
 
-  // Operations
-  const addTransaction = (tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>) => {
+  // Mutations
+  const addTransaction = useCallback((tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>) => {
     const newTx: Transaction = {
       ...tx,
       id: `tx_${Date.now()}`,
@@ -713,10 +620,14 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       category: categories.find((c) => c.id === tx.category_id),
       family_member: familyMembers.find((f) => f.id === tx.family_member_id),
     }
-    setTransactions((prev) => [newTx, ...prev])
-  }
 
-  const updateTransaction = (id: string, updates: Partial<Transaction>) => {
+    setTransactions((prev) => [newTx, ...prev])
+
+    // Background server action
+    createTransactionAction(tx).catch((e) => console.warn('Cloud sync offline:', e))
+  }, [categories, familyMembers])
+
+  const updateTransaction = useCallback((id: string, updates: Partial<Transaction>) => {
     setTransactions((prev) =>
       prev.map((t) => {
         if (t.id === id) {
@@ -732,30 +643,36 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         return t
       })
     )
-  }
+  }, [categories, familyMembers])
 
-  const deleteTransaction = (id: string) => {
+  const deleteTransaction = useCallback((id: string) => {
     setTransactions((prev) => prev.filter((t) => t.id !== id))
-  }
+    deleteTransactionAction(id).catch((e) => console.warn('Cloud sync offline:', e))
+  }, [])
 
-  const toggleBillPaid = (id: string) => {
+  const toggleBillPaid = useCallback((id: string) => {
     setBills((prev) =>
       prev.map((b) => {
         if (b.id === id) {
           const isNowPaid = b.status !== 'paid'
+          const newStatus = isNowPaid ? 'paid' : 'pending'
+          const newPaidAt = isNowPaid ? new Date().toISOString() : null
+
+          toggleBillPaidAction(id, newStatus, newPaidAt).catch((e) => console.warn('Cloud sync offline:', e))
+
           return {
             ...b,
-            status: isNowPaid ? 'paid' : 'pending',
-            paid_at: isNowPaid ? new Date().toISOString() : null,
+            status: newStatus as any,
+            paid_at: newPaidAt,
             updated_at: new Date().toISOString(),
           }
         }
         return b
       })
     )
-  }
+  }, [])
 
-  const addBill = (bill: Omit<Bill, 'id' | 'created_at' | 'updated_at'>) => {
+  const addBill = useCallback((bill: Omit<Bill, 'id' | 'created_at' | 'updated_at'>) => {
     const newBill: Bill = {
       ...bill,
       id: `bill_${Date.now()}`,
@@ -763,20 +680,22 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       updated_at: new Date().toISOString(),
       category: categories.find((c) => c.id === bill.category_id),
     }
-    setBills((prev) => [...prev, newBill])
-  }
+    setBills((prev) => [newBill, ...prev])
+    createBillAction(bill).catch((e) => console.warn('Cloud sync offline:', e))
+  }, [categories])
 
-  const updateBill = (id: string, updates: Partial<Bill>) => {
+  const updateBill = useCallback((id: string, updates: Partial<Bill>) => {
     setBills((prev) =>
       prev.map((b) => (b.id === id ? { ...b, ...updates, updated_at: new Date().toISOString() } : b))
     )
-  }
+  }, [])
 
-  const deleteBill = (id: string) => {
+  const deleteBill = useCallback((id: string) => {
     setBills((prev) => prev.filter((b) => b.id !== id))
-  }
+    deleteBillAction(id).catch((e) => console.warn('Cloud sync offline:', e))
+  }, [])
 
-  const addFamilyMember = (member: Omit<FamilyMember, 'id' | 'created_at' | 'updated_at'>) => {
+  const addFamilyMember = useCallback((member: Omit<FamilyMember, 'id' | 'created_at' | 'updated_at'>) => {
     const newMember: FamilyMember = {
       ...member,
       id: `fam_${Date.now()}`,
@@ -784,19 +703,21 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       updated_at: new Date().toISOString(),
     }
     setFamilyMembers((prev) => [...prev, newMember])
-  }
+    createFamilyMemberAction(member).catch((e) => console.warn('Cloud sync offline:', e))
+  }, [])
 
-  const updateFamilyMember = (id: string, updates: Partial<FamilyMember>) => {
+  const updateFamilyMember = useCallback((id: string, updates: Partial<FamilyMember>) => {
     setFamilyMembers((prev) =>
       prev.map((m) => (m.id === id ? { ...m, ...updates, updated_at: new Date().toISOString() } : m))
     )
-  }
+  }, [])
 
-  const deleteFamilyMember = (id: string) => {
+  const deleteFamilyMember = useCallback((id: string) => {
     setFamilyMembers((prev) => prev.filter((m) => m.id !== id))
-  }
+    deleteFamilyMemberAction(id).catch((e) => console.warn('Cloud sync offline:', e))
+  }, [])
 
-  const addSavingsGoal = (goal: Omit<SavingsGoal, 'id' | 'created_at' | 'updated_at'>) => {
+  const addSavingsGoal = useCallback((goal: Omit<SavingsGoal, 'id' | 'created_at' | 'updated_at'>) => {
     const newGoal: SavingsGoal = {
       ...goal,
       id: `goal_${Date.now()}`,
@@ -804,65 +725,58 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       updated_at: new Date().toISOString(),
     }
     setSavingsGoals((prev) => [...prev, newGoal])
-  }
+    createSavingsGoalAction(goal).catch((e) => console.warn('Cloud sync offline:', e))
+  }, [])
 
-  const updateSavingsGoal = (id: string, updates: Partial<SavingsGoal>) => {
+  const updateSavingsGoal = useCallback((id: string, updates: Partial<SavingsGoal>) => {
     setSavingsGoals((prev) =>
       prev.map((g) => (g.id === id ? { ...g, ...updates, updated_at: new Date().toISOString() } : g))
     )
-  }
+  }, [])
 
-  const contributeToGoal = (id: string, amount: number) => {
+  const contributeToGoal = useCallback((id: string, amount: number) => {
     setSavingsGoals((prev) =>
-      prev.map((g) =>
-        g.id === id
-          ? {
-              ...g,
-              current_amount: g.current_amount + amount,
-              updated_at: new Date().toISOString(),
-            }
-          : g
-      )
+      prev.map((g) => {
+        if (g.id === id) {
+          const newAmt = g.current_amount + amount
+          contributeToGoalAction(id, newAmt).catch((e) => console.warn('Cloud sync offline:', e))
+          return { ...g, current_amount: newAmt, updated_at: new Date().toISOString() }
+        }
+        return g
+      })
     )
-    // Also record transfer transaction
-    const targetGoal = savingsGoals.find((g) => g.id === id)
-    addTransaction({
-      clerk_user_id: userProfile.clerk_user_id,
-      category_id: 'cat_11',
-      family_member_id: null,
-      type: 'transfer',
-      amount: amount,
-      description: `Contribution to ${targetGoal ? targetGoal.name : 'Savings Goal'}`,
-      transaction_date: new Date().toISOString().split('T')[0],
-      payment_method: 'Internal Transfer',
-      receipt_url: null,
-      notes: `Allocated to ${targetGoal ? targetGoal.name : 'goal'}`,
-    })
-  }
+  }, [])
 
-  const deleteSavingsGoal = (id: string) => {
+  const deleteSavingsGoal = useCallback((id: string) => {
     setSavingsGoals((prev) => prev.filter((g) => g.id !== id))
-  }
+    deleteSavingsGoalAction(id).catch((e) => console.warn('Cloud sync offline:', e))
+  }, [])
 
-  const updateFinancialProfile = (fp: Partial<FinancialProfile>) => {
-    setFinancialProfile((prev) => ({ ...prev, ...fp, updated_at: new Date().toISOString() }))
-  }
+  const updateFinancialProfile = useCallback((fp: Partial<FinancialProfile>) => {
+    setFinancialProfile((prev) => {
+      const next = { ...prev, ...fp, updated_at: new Date().toISOString() }
+      saveFinancialProfileAction(next).catch((e) => console.warn('Cloud sync offline:', e))
+      return next
+    })
+  }, [])
 
-  const updateUserProfile = (up: Partial<UserProfile>) => {
-    setUserProfile((prev) => ({ ...prev, ...up, updated_at: new Date().toISOString() }))
-  }
+  const updateUserProfile = useCallback((up: Partial<UserProfile>) => {
+    setUserProfile((prev) => {
+      const next = { ...prev, ...up, updated_at: new Date().toISOString() }
+      saveUserProfileAction(next).catch((e) => console.warn('Cloud sync offline:', e))
+      return next
+    })
+  }, [])
 
-  const markNotificationRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    )
-  }
+  const markNotificationRead = useCallback((id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
+  }, [])
 
-  const markAllNotificationsRead = () => {
+  const markAllNotificationsRead = useCallback(() => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-  }
+  }, [])
 
-  const resetToDemoData = () => {
+  const resetToDemoData = useCallback(() => {
     setUserProfile(defaultUserProfile)
     setFinancialProfile(defaultFinancialProfile)
     setFamilyMembers(defaultFamilyMembers)
@@ -872,10 +786,10 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     setSavingsGoals(defaultSavingsGoals)
     setNotifications(defaultNotifications)
     localStorage.removeItem(STORAGE_KEY)
-  }
+  }, [])
 
-  const exportAllDataJSON = () => {
-    const data = {
+  const exportAllDataJSON = useCallback(() => {
+    return JSON.stringify({
       userProfile,
       financialProfile,
       familyMembers,
@@ -884,13 +798,12 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       bills,
       savingsGoals,
       notifications,
-      exportedAt: new Date().toISOString(),
-      app: 'LifePlan PWA',
-    }
-    return JSON.stringify(data, null, 2)
-  }
+      exportDate: new Date().toISOString(),
+      version: 'LifePlan-1.0',
+    }, null, 2)
+  }, [userProfile, financialProfile, familyMembers, categories, transactions, bills, savingsGoals, notifications])
 
-  const importDataJSON = (jsonStr: string): boolean => {
+  const importDataJSON = useCallback((jsonStr: string): boolean => {
     try {
       const parsed = JSON.parse(jsonStr)
       if (parsed.userProfile) setUserProfile(parsed.userProfile)
@@ -906,7 +819,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       console.error('Import error:', e)
       return false
     }
-  }
+  }, [])
 
   return (
     <FinancialContext.Provider
@@ -921,12 +834,13 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
         notifications,
         insights: defaultInsights,
         currentMonthPlan,
-        totalIncome,
-        totalExpenses,
-        totalSaved,
-        safeToSpendDaily,
-        remainingSalary,
-        emergencyFundMonths,
+        storageMode,
+        totalIncome: totals.totalIncome,
+        totalExpenses: totals.totalExpenses,
+        totalSaved: totals.totalTransfers,
+        safeToSpendDaily: salaryMetrics.safeToSpendDaily,
+        remainingSalary: salaryMetrics.remainingSalary,
+        emergencyFundMonths: runwayCalc.runwayMonths,
         unreadCount,
         currency: userProfile.currency || 'USD',
         addTransaction,
@@ -958,9 +872,9 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useFinancialData() {
-  const context = useContext(FinancialContext)
-  if (!context) {
-    throw new Error('useFinancialData must be used within a FinancialProvider')
+  const ctx = useContext(FinancialContext)
+  if (!ctx) {
+    throw new Error('useFinancialData must be used within FinancialProvider')
   }
-  return context
+  return ctx
 }

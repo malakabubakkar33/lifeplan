@@ -13,15 +13,22 @@ import {
   TrendingUp,
   Receipt,
   Trash2,
+  BookOpen,
+  Shirt,
+  Bus,
+  Activity,
+  HeartPulse,
+  Utensils,
+  DollarSign,
 } from 'lucide-react'
 import { useFinancialData } from '@/lib/context/financial-context'
 import { formatMoney } from '@/lib/finance/currency'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 export default function FamilyPage() {
   const { familyMembers, transactions, currency, userProfile, addFamilyMember, deleteFamilyMember } =
@@ -41,25 +48,29 @@ export default function FamilyPage() {
       .filter((t) => t.family_member_id === m.id && t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0)
     const pct = m.monthly_budget > 0 ? Math.min(100, Math.round((spent / m.monthly_budget) * 100)) : 0
+    const remaining = Math.max(0, m.monthly_budget - spent)
     return {
       ...m,
       spent,
+      remaining,
       pct,
     }
   })
 
+  const totalSpentAcrossFamily = memberSpending.reduce((sum, m) => sum + m.spent, 0)
+
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name) return
+    if (!name.trim()) return
 
     addFamilyMember({
       clerk_user_id: userProfile.clerk_user_id,
-      name,
+      name: name.trim(),
       relationship,
       date_of_birth: null,
       avatar_url: null,
       monthly_budget: parseFloat(monthlyBudget) || 0,
-      notes: notes || null,
+      notes: notes.trim() || null,
     })
 
     setName('')
@@ -68,214 +79,215 @@ export default function FamilyPage() {
     setIsAddOpen(false)
   }
 
-  // Children-specific transactions
+  // Children members & children-specific expenses
+  const childrenMembers = familyMembers.filter((m) => m.relationship.toLowerCase().includes('child'))
   const childrenTxs = transactions.filter((t) => {
     const mem = familyMembers.find((m) => m.id === t.family_member_id)
     return mem && mem.relationship.toLowerCase().includes('child')
   })
+  const totalChildrenSpending = childrenTxs.reduce((sum, t) => sum + t.amount, 0)
+
+  const childExpenseCategories = [
+    { name: 'School Tuition', icon: GraduationCap, color: '#19D98A', desc: 'Tuition & academic term fees' },
+    { name: 'Books & Supplies', icon: BookOpen, color: '#3EE8A2', desc: 'Stationery, art & reading' },
+    { name: 'Uniform & Clothing', icon: Shirt, color: '#63F2B0', desc: 'School uniform & seasonal shoes' },
+    { name: 'School Transit', icon: Bus, color: '#0F8C5C', desc: 'Bus pass, carpooling & fuel' },
+    { name: 'Activities & Sports', icon: Activity, color: '#10B981', desc: 'Soccer, ballet & clubs' },
+    { name: 'Pediatric Medical', icon: HeartPulse, color: '#34D399', desc: 'Vaccines & dentist visits' },
+  ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto pb-10">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Family & Children Finances
+            Family & Household Management
           </h1>
-          <p className="text-sm text-[#9AAFA5] mt-0.5">
-            Manage allowances, school fees, pediatric healthcare, and family allocations.
+          <p className="text-xs sm:text-sm text-[#9AAFA5] mt-0.5">
+            Oversee household allowances, track dependents, and manage child-specific expenses.
           </p>
         </div>
 
-        <Button onClick={() => setIsAddOpen(true)} className="self-start sm:self-auto gap-2">
+        <Button
+          onClick={() => setIsAddOpen(true)}
+          className="self-start sm:self-auto gap-2 bg-[#19D98A] text-[#050806] font-bold hover:bg-[#3EE8A2]"
+        >
           <Plus size={16} />
           <span>Add Family Member</span>
         </Button>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="bg-[#0B110E]">
-          <CardContent className="p-5">
-            <div className="text-xs font-semibold text-[#60756C]">Total Family Members</div>
-            <div className="text-2xl font-black text-white mt-1">{familyMembers.length} Dependents</div>
-            <p className="text-[11px] text-[#9AAFA5] mt-1">Spouse, children, and parents</p>
-          </CardContent>
-        </Card>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="p-4 rounded-2xl bg-[#0B110E] border border-white/[0.06]">
+          <div className="text-[10px] font-bold text-[#60756C] uppercase">Household Members</div>
+          <div className="text-xl font-black text-white mt-0.5">{familyMembers.length} Members</div>
+          <p className="text-[11px] text-[#9AAFA5] mt-0.5">{childrenMembers.length} dependents / children</p>
+        </div>
 
-        <Card className="bg-[#0B110E]">
-          <CardContent className="p-5">
-            <div className="text-xs font-semibold text-[#60756C]">Monthly Family Budget Pool</div>
-            <div className="text-2xl font-black text-[#19D98A] mt-1">
-              {formatMoney(totalAllocated, currency)}
-            </div>
-            <p className="text-[11px] text-[#9AAFA5] mt-1">Cumulative allocated allowances</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-[#0B110E]">
-          <CardContent className="p-5">
-            <div className="text-xs font-semibold text-[#60756C]">Children Expenses Tracked</div>
-            <div className="text-2xl font-black text-[#63F2B0] mt-1">
-              {formatMoney(
-                childrenTxs.reduce((sum, t) => sum + t.amount, 0),
-                currency
-              )}
-            </div>
-            <p className="text-[11px] text-[#9AAFA5] mt-1">Tuition, hobbies, and clothing</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Member Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {memberSpending.map((member) => {
-          const isChild = member.relationship.toLowerCase().includes('child')
-          return (
-            <Card key={member.id} className="bg-[#0B110E] hover:border-white/20 transition-all flex flex-col justify-between">
-              <CardHeader className="pb-3 flex flex-row items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-sm ${
-                      isChild
-                        ? 'bg-[#19D98A]/15 text-[#19D98A]'
-                        : 'bg-white/[0.08] text-white'
-                    }`}
-                  >
-                    {isChild ? <Baby size={22} /> : <User size={22} />}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-white text-base leading-tight">{member.name}</h3>
-                    <Badge variant="secondary" className="text-[10px] mt-1">
-                      {member.relationship}
-                    </Badge>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => deleteFamilyMember(member.id)}
-                  className="p-1.5 text-[#60756C] hover:text-[#E05252] hover:bg-[#E05252]/10 rounded-lg transition-colors"
-                  title="Remove member"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </CardHeader>
-
-              <CardContent className="space-y-3 pt-0">
-                {member.notes && (
-                  <p className="text-xs text-[#9AAFA5] bg-white/[0.02] p-2.5 rounded-xl border border-white/[0.04] leading-relaxed">
-                    {member.notes}
-                  </p>
-                )}
-
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-[#60756C]">Utilized this Month</span>
-                    <span className={member.pct > 90 ? 'text-[#E05252]' : 'text-[#19D98A]'}>
-                      {formatMoney(member.spent, currency)} / {formatMoney(member.monthly_budget, currency)}
-                    </span>
-                  </div>
-                  <Progress value={member.pct} />
-                </div>
-
-                <Link
-                  href={`/family/${member.id}`}
-                  className="flex items-center justify-between pt-3 border-t border-white/[0.04] text-xs font-semibold text-[#9AAFA5] hover:text-[#19D98A] transition-colors"
-                >
-                  <span>View Member Ledger</span>
-                  <ChevronRight size={14} />
-                </Link>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Children Expenses Activity Log */}
-      <Card className="bg-[#0B110E]">
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#19D98A]/10 text-[#19D98A] flex items-center justify-center">
-              <GraduationCap size={18} />
-            </div>
-            <div>
-              <CardTitle className="text-base font-bold">Children & Education Ledger</CardTitle>
-              <p className="text-xs text-[#9AAFA5]">Tuition, extracurricular activities, and supplies</p>
-            </div>
+        <div className="p-4 rounded-2xl bg-[#0B110E] border border-white/[0.06]">
+          <div className="text-[10px] font-bold text-[#60756C] uppercase">Total Monthly Allowances</div>
+          <div className="text-xl font-black text-[#19D98A] mt-0.5">
+            {formatMoney(totalAllocated, currency)}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-2.5">
-          {childrenTxs.length === 0 ? (
-            <p className="text-xs text-[#60756C] text-center py-4">No child-attributed expenses recorded yet.</p>
-          ) : (
-            childrenTxs.map((tx) => (
+          <p className="text-[11px] text-[#9AAFA5] mt-0.5">Allocated discretionary budgets</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#0B110E] border border-white/[0.06]">
+          <div className="text-[10px] font-bold text-[#60756C] uppercase">Spent This Month</div>
+          <div className="text-xl font-black text-white mt-0.5">
+            {formatMoney(totalSpentAcrossFamily, currency)}
+          </div>
+          <p className="text-[11px] text-[#9AAFA5] mt-0.5">Recorded member expenses</p>
+        </div>
+      </div>
+
+      {/* Family Members Grid */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-bold text-white px-1">Household Members</h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {memberSpending.map((m) => {
+            const isChild = m.relationship.toLowerCase().includes('child')
+            return (
               <div
-                key={tx.id}
-                className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04]"
+                key={m.id}
+                className="p-5 rounded-3xl bg-[#0B110E] border border-white/[0.06] hover:border-white/[0.12] transition-all space-y-4"
               >
-                <div>
-                  <div className="text-sm font-semibold text-white">{tx.description}</div>
-                  <div className="text-xs text-[#9AAFA5] flex items-center gap-2 mt-0.5">
-                    <span>{tx.transaction_date}</span>
-                    <span>•</span>
-                    <span className="text-[#19D98A]">{tx.family_member?.name}</span>
-                    {tx.payment_method && (
-                      <>
-                        <span>•</span>
-                        <span>{tx.payment_method}</span>
-                      </>
-                    )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-sm ${
+                        isChild ? 'bg-[#19D98A]/15 text-[#19D98A]' : 'bg-white/[0.06] text-white'
+                      }`}
+                    >
+                      {isChild ? <Baby size={20} /> : <User size={20} />}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">{m.name}</h3>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Badge variant="secondary" className="text-[10px]">
+                          {m.relationship}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/family/${m.id}`}
+                      className="p-2 rounded-xl bg-white/[0.03] text-[#9AAFA5] hover:text-white transition-colors"
+                      title="View member ledger"
+                    >
+                      <ChevronRight size={16} />
+                    </Link>
+                    <button
+                      onClick={() => deleteFamilyMember(m.id)}
+                      className="p-2 rounded-xl text-[#60756C] hover:text-[#E05252] transition-colors"
+                      title="Remove member"
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 </div>
-                <div className="text-sm font-black text-white">
-                  -{formatMoney(tx.amount, currency)}
+
+                {/* Progress Bar & Allowances */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[#60756C]">Monthly Utilized</span>
+                    <span className="font-bold text-[#19D98A]">{m.pct}%</span>
+                  </div>
+                  <Progress value={m.pct} className="h-1.5" />
+                  <div className="flex justify-between text-[11px] text-[#9AAFA5] pt-1">
+                    <span>Spent: {formatMoney(m.spent, currency)}</span>
+                    <span>Budget: {formatMoney(m.monthly_budget, currency)}</span>
+                  </div>
                 </div>
               </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+            )
+          })}
+        </div>
+      </div>
 
-      {/* Add Member Modal */}
+      {/* Children Expense Management Section */}
+      <div className="p-6 rounded-3xl bg-gradient-to-br from-[#0B1410] via-[#0B110E] to-[#050806] border border-[#19D98A]/25 space-y-5 shadow-[0_12px_40px_rgba(0,0,0,0.4)]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Baby size={18} className="text-[#19D98A]" />
+              <h2 className="text-base font-black text-white">Children&apos;s Expense Ledger</h2>
+            </div>
+            <p className="text-xs text-[#9AAFA5] mt-0.5">
+              Dedicated tracking for academic tuition, supplies, sports, and healthcare.
+            </p>
+          </div>
+
+          <div className="text-left sm:text-right">
+            <div className="text-[10px] text-[#60756C] uppercase font-bold">Total Child Spending</div>
+            <div className="text-xl font-black text-[#19D98A] mt-0.5">
+              {formatMoney(totalChildrenSpending, currency)}
+            </div>
+          </div>
+        </div>
+
+        {/* Children Categories Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {childExpenseCategories.map((c) => {
+            const Icon = c.icon
+            return (
+              <div
+                key={c.name}
+                className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.04] space-y-1.5 hover:border-white/[0.1] transition-colors"
+              >
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs" style={{ backgroundColor: `${c.color}20`, color: c.color }}>
+                  <Icon size={16} />
+                </div>
+                <div className="text-xs font-bold text-white">{c.name}</div>
+                <p className="text-[10px] text-[#60756C] leading-snug">{c.desc}</p>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Add Family Member Modal */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="bg-[#0B110E] border-white/[0.1] text-white">
           <DialogHeader>
             <DialogTitle>Add Family Member</DialogTitle>
-            <DialogDescription>
-              Assign dedicated budgets and track individual expenses for household members.
-            </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleAddMember} className="space-y-4 py-2">
             <div>
-              <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">Full Name</label>
+              <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">Full Name</label>
               <Input
-                required
-                placeholder="e.g. Leo Morgan, Sarah, Grandfather"
+                placeholder="e.g. Leo Morgan"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">Relationship</label>
+                <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">Relationship</label>
                 <select
                   value={relationship}
                   onChange={(e) => setRelationship(e.target.value)}
-                  className="w-full bg-[#101A15] border border-white/[0.1] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#19D98A]"
+                  className="w-full h-10 px-3 rounded-xl bg-[#101A15] border border-white/[0.08] text-white text-xs focus:outline-none"
                 >
                   <option value="Spouse">Spouse</option>
                   <option value="Child">Child</option>
                   <option value="Parent">Parent</option>
-                  <option value="Sibling">Sibling</option>
-                  <option value="Other">Other Dependent</option>
+                  <option value="Dependent">Dependent</option>
+                  <option value="Other">Other</option>
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">
-                  Monthly Budget ({currency})
+                <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">
+                  Monthly Allowance ({currency})
                 </label>
                 <Input
                   type="number"
@@ -287,18 +299,16 @@ export default function FamilyPage() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">
-                Notes / Scope (Optional)
-              </label>
+              <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">Notes (Optional)</label>
               <Input
-                placeholder="e.g. Grade 2 tuition, soccer academy, dental checkups"
+                placeholder="e.g. Grade 2 tuition, school transit, personal care"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
 
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
+            <DialogFooter className="gap-2 pt-2">
+              <Button variant="outline" type="button" onClick={() => setIsAddOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit">Add Member</Button>

@@ -5,6 +5,7 @@ import { FinancialProvider } from '@/lib/context/financial-context'
 import { Sidebar } from './sidebar'
 import { BottomNav } from './bottom-nav'
 import { Header } from './header'
+import { InstallBanner } from '@/components/pwa/install-banner'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -23,6 +24,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Mobile Bottom Navigation */}
         <BottomNav />
+
+        {/* Mobile PWA Install Banner */}
+        <InstallBanner />
       </div>
     </FinancialProvider>
   )

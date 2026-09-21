@@ -10,13 +10,19 @@ import {
   User,
   Lightbulb,
   Zap,
+  CheckCircle2,
+  AlertCircle,
+  Key,
 } from 'lucide-react'
 import { useFinancialData } from '@/lib/context/financial-context'
 import { formatMoney } from '@/lib/finance/currency'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { FinancialAssistantService, AssistantFinancialContext } from '@/lib/services/assistant'
+import { aggregateSpendingByCategory } from '@/lib/finance/transactions'
+import { getBillUrgency } from '@/lib/finance/bills'
 
 interface ChatMessage {
   id: string
@@ -31,9 +37,15 @@ export default function AssistantPage() {
     userProfile,
     currency,
     safeToSpendDaily,
+    remainingSalary,
     emergencyFundMonths,
+    totalIncome,
+    totalExpenses,
+    totalSaved,
     bills,
     savingsGoals,
+    transactions,
+    categories,
   } = useFinancialData()
 
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -42,13 +54,19 @@ export default function AssistantPage() {
       sender: 'assistant',
       text: `Hello ${
         userProfile.full_name?.split(' ')[0] || 'there'
-      }! I am your **LifePlan AI Financial Advisor**. I have real-time access to your cash flow, family budgets, upcoming bills, and emergency reserves.\n\nHow can I help you strengthen your financial health today?`,
+      }! I am your **LifePlan Financial Intelligence Engine**.\n\nI have authorized access to your live salary of ${formatMoney(
+        financialProfile.monthly_salary || 7500,
+        currency
+      )}, your daily safe discretionary limit (${formatMoney(safeToSpendDaily, currency)}/day), and your ${emergencyFundMonths}-month emergency reserve.\n\nHow can I help optimize your finances today?`,
       timestamp: 'Just now',
     },
   ])
+
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const isAIConfigured = FinancialAssistantService.isAIConfigured()
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -59,197 +77,218 @@ export default function AssistantPage() {
   }, [messages, isTyping])
 
   const quickPrompts = [
-    'Analyze my 50/30/20 budget balance',
-    'How is my emergency fund health?',
-    'Can I afford a $1,200 vacation next month?',
-    'How can I save $400 more this month?',
-    'Review my upcoming bills schedule',
+    'How much can I spend this week?',
+    'Where am I spending the most?',
+    'Can I afford a $350 purchase?',
+    'How is my emergency fund?',
+    'Why is my budget over?',
   ]
 
-  const generateAIResponse = (query: string): string => {
-    const q = query.toLowerCase()
-    const salary = financialProfile.monthly_salary || 7500
+  // Build authorized user context
+  const now = new Date()
+  const today = now.getDate()
+  const payday = financialProfile.payday || 28
+  const daysToPayday = payday >= today ? payday - today : 30 - today + payday
 
-    if (q.includes('50/30/20') || q.includes('balance') || q.includes('budget')) {
-      return `### 📊 50/30/20 Budget Assessment\n\n- **Monthly Net Income**: ${formatMoney(
-        salary,
-        currency
-      )}\n- **Fixed Needs**: ~42% (${formatMoney(
-        (financialProfile.rent || 0) +
-          (financialProfile.utilities || 0) +
-          (financialProfile.groceries || 0) +
-          (financialProfile.debt || 0),
-        currency
-      )})\n- **Discretionary Wants**: ~10%\n- **Savings & Reserves**: ~26%\n\n> **Key Takeaway**: You are in an **exceptionally healthy position**! Your fixed necessities remain well below the 50% threshold, allowing you to invest 26% of your salary into wealth creation and emergency reserves.`
-    }
+  const categoryAgg = aggregateSpendingByCategory(transactions, categories)
+  const categoriesSpending = categoryAgg.map((c) => ({
+    name: c.categoryName,
+    spent: c.totalSpent,
+    pct: c.percentageOfTotal,
+  }))
 
-    if (q.includes('emergency') || q.includes('runway') || q.includes('fund')) {
-      return `### 🛡️ Emergency Reserve Audit\n\n- **Current Runway**: **${emergencyFundMonths} months**\n- **Recommended Horizon**: 6 months\n- **Target Status**: **Strong & Secure**\n\nWith your monthly fixed commitments covered, your family can comfortably navigate unexpected job transitions or medical emergencies for over 5.5 months without touching long-term retirement accounts.`
-    }
+  const topExpenses = transactions
+    .filter((t) => t.type === 'expense')
+    .slice(0, 5)
+    .map((t) => ({ description: t.description, amount: t.amount, date: t.transaction_date }))
 
-    if (q.includes('vacation') || q.includes('afford') || q.includes('trip')) {
-      return `### ✈️ Vacation Affordability Check\n\n- **Daily Discretionary Limit**: ${formatMoney(
-        safeToSpendDaily,
-        currency
-      )}/day\n- **Monthly Unallocated Buffer**: ${formatMoney(
-        financialProfile.savings_target * 0.4,
-        currency
-      )}\n\n**Verdict**: **Yes, you can afford it!** However, rather than withdrawing from your primary liquid checking account, allocate $400/mo over the next 3 months into your **Family Summer Vacation Goal**, which already has substantial progress.`
-    }
+  const upcomingBills = bills.map((b) => ({
+    name: b.name,
+    amount: b.amount,
+    due_date: b.due_date,
+    urgency: getBillUrgency(b, now).urgency,
+  }))
 
-    if (q.includes('bill') || q.includes('due')) {
-      const pendingCount = bills.filter((b) => b.status !== 'paid').length
-      return `### 🗓️ Upcoming Bills Schedule\n\nYou have **${pendingCount} pending bills** remaining this billing cycle.\n\n- Ensure your checking account has at least **${formatMoney(
-        bills.reduce((s, b) => (b.status !== 'paid' ? s + b.amount : s), 0),
-        currency
-      )}** ready for scheduled direct drafts before the 28th payday.`
-    }
+  const goalsSummary = savingsGoals.map((g) => ({
+    name: g.name,
+    target: g.target_amount,
+    current: g.current_amount,
+    pct: g.target_amount > 0 ? Math.round((g.current_amount / g.target_amount) * 100) : 0,
+  }))
 
-    return `### 💡 Personalized Financial Guidance\n\nLooking at your profile with **${formatMoney(
-      salary,
-      currency
-    )}/mo** income:\n\n1. **Safe-to-Spend Daily**: Maintain spending within **${formatMoney(
-      safeToSpendDaily,
-      currency
-    )}/day** to preserve your end-of-month cash surplus.\n2. **High-Yield Automation**: Automate your savings deposit of **${formatMoney(
-      financialProfile.savings_target,
-      currency
-    )}** right on payday (${financialProfile.payday}th of month) so you "pay yourself first".\n3. **Debt Acceleration**: Consider adding $50/mo extra to your lowest-balance debt loan to eliminate interest early.`
+  const assistantContext: AssistantFinancialContext = {
+    salary: financialProfile.monthly_salary || 7500,
+    totalIncome,
+    totalExpenses,
+    totalSaved,
+    remainingSalary,
+    safeToSpendDaily,
+    emergencyFundMonths,
+    daysToPayday,
+    currency,
+    categoriesSpending,
+    topExpenses,
+    upcomingBills,
+    savingsGoals: goalsSummary,
   }
 
-  const handleSend = (textToSend?: string) => {
-    const q = textToSend || input
-    if (!q.trim()) return
+  const handleSend = async (textToSend?: string) => {
+    const promptText = textToSend || input
+    if (!promptText.trim() || isTyping) return
 
     const userMsg: ChatMessage = {
       id: `usr_${Date.now()}`,
       sender: 'user',
-      text: q,
+      text: promptText.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }
 
     setMessages((prev) => [...prev, userMsg])
-    if (!textToSend) setInput('')
+    setInput('')
     setIsTyping(true)
 
-    setTimeout(() => {
-      const aiReply = generateAIResponse(q)
-      const aiMsg: ChatMessage = {
-        id: `ai_${Date.now()}`,
-        sender: 'assistant',
-        text: aiReply,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      }
-      setMessages((prev) => [...prev, aiMsg])
+    try {
+      const res = await FinancialAssistantService.query(promptText.trim(), assistantContext)
+
+      setTimeout(() => {
+        const assistantMsg: ChatMessage = {
+          id: `asst_${Date.now()}`,
+          sender: 'assistant',
+          text: res.answer,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }
+        setMessages((prev) => [...prev, assistantMsg])
+        setIsTyping(false)
+      }, 500)
+    } catch (err) {
       setIsTyping(false)
-    }, 800)
+    }
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4 flex flex-col h-[calc(100vh-130px)]">
+    <div className="space-y-6 max-w-4xl mx-auto pb-8 flex flex-col h-[calc(100vh-10rem)]">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#0F8C5C] to-[#19D98A] flex items-center justify-center text-[#050806] shadow-[0_0_20px_rgba(25,217,138,0.3)]">
-            <Bot size={22} strokeWidth={2.5} />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              LifePlan AI Assistant
+            </h1>
+            <Badge variant="default" className="text-[10px]">
+              {isAIConfigured ? 'LLM Provider Online' : 'Rule Engine Active'}
+            </Badge>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black text-white">LifePlan AI Advisor</h1>
-              <Badge variant="default" className="text-[10px]">
-                Active Context
-              </Badge>
-            </div>
-            <p className="text-xs text-[#9AAFA5]">Contextual guidance synced with your live data</p>
-          </div>
+          <p className="text-xs sm:text-sm text-[#9AAFA5] mt-0.5">
+            Real-time contextual advice querying your verified salary, bills, and liquid reserves.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-[#9AAFA5]">
+          <ShieldCheck size={16} className="text-[#19D98A]" />
+          <span>User Partitioned & Private</span>
         </div>
       </div>
 
-      {/* Chat Messages Log */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-none">
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`flex gap-3 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            {m.sender === 'assistant' && (
-              <div className="w-8 h-8 rounded-xl bg-[#19D98A]/15 text-[#19D98A] flex items-center justify-center shrink-0 mt-1">
-                <Sparkles size={16} />
-              </div>
-            )}
+      {/* Mode / LLM Provider Notice Banner */}
+      {!isAIConfigured && (
+        <div className="p-3.5 rounded-2xl bg-[#0B110E] border border-white/[0.08] text-xs text-[#9AAFA5] flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <Key size={15} className="text-[#63F2B0] shrink-0" />
+            <span>
+              Operating via <strong>LifePlan Financial Modeling Engine</strong>. To enable conversational LLMs (OpenAI, Gemini, Anthropic), configure your API key in environment variables.
+            </span>
+          </div>
+        </div>
+      )}
 
+      {/* Messages Scroll Area */}
+      <div className="flex-1 rounded-3xl bg-[#0B110E] border border-white/[0.06] p-4 sm:p-6 overflow-y-auto space-y-4 scrollbar-none">
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex items-start gap-3 ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+          >
             <div
-              className={`max-w-2xl rounded-2xl p-4 text-sm leading-relaxed ${
-                m.sender === 'user'
-                  ? 'bg-[#19D98A] text-[#050806] font-semibold shadow-md'
-                  : 'bg-[#0B110E] text-[#F5FFF9] border border-white/[0.08] shadow-lg'
+              className={`w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                msg.sender === 'user'
+                  ? 'bg-white/[0.1] text-white'
+                  : 'bg-gradient-to-br from-[#063B28] to-[#19D98A] text-[#050806] shadow-[0_0_12px_rgba(25,217,138,0.3)]'
               }`}
             >
-              <div className="whitespace-pre-wrap font-sans text-xs sm:text-sm">{m.text}</div>
-              <div
-                className={`text-[10px] mt-2 text-right ${
-                  m.sender === 'user' ? 'text-black/60' : 'text-[#60756C]'
-                }`}
-              >
-                {m.timestamp}
-              </div>
+              {msg.sender === 'user' ? <User size={16} /> : <Bot size={18} />}
             </div>
 
-            {m.sender === 'user' && (
-              <div className="w-8 h-8 rounded-xl bg-white/[0.08] text-white flex items-center justify-center shrink-0 mt-1">
-                <User size={16} />
+            <div
+              className={`max-w-[85%] sm:max-w-[75%] p-4 rounded-3xl text-xs sm:text-sm leading-relaxed whitespace-pre-line ${
+                msg.sender === 'user'
+                  ? 'bg-[#19D98A] text-[#050806] font-semibold rounded-tr-none'
+                  : 'bg-[#101A15] border border-white/[0.06] text-white rounded-tl-none'
+              }`}
+            >
+              {msg.text}
+              <div
+                className={`text-[9px] mt-2 font-normal ${
+                  msg.sender === 'user' ? 'text-[#050806]/60 text-right' : 'text-[#60756C]'
+                }`}
+              >
+                {msg.timestamp}
               </div>
-            )}
+            </div>
           </div>
         ))}
 
         {isTyping && (
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-[#19D98A]/15 text-[#19D98A] flex items-center justify-center shrink-0">
-              <Sparkles size={16} />
+            <div className="w-9 h-9 rounded-2xl bg-[#063B28] text-[#19D98A] flex items-center justify-center shrink-0">
+              <Bot size={18} />
             </div>
-            <div className="bg-[#0B110E] border border-white/[0.08] px-4 py-3 rounded-2xl flex items-center gap-1.5 text-xs text-[#9AAFA5]">
-              <span className="w-2 h-2 rounded-full bg-[#19D98A] animate-pulse" />
-              <span>Analyzing financial model...</span>
+            <div className="p-3.5 rounded-2xl bg-[#101A15] border border-white/[0.06] flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#19D98A] animate-bounce" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#19D98A] animate-bounce [animation-delay:0.2s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#19D98A] animate-bounce [animation-delay:0.4s]" />
             </div>
           </div>
         )}
+
         <div ref={messagesEndRef} />
       </div>
 
       {/* Suggested Quick Prompts */}
-      <div className="shrink-0 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1 shrink-0">
         {quickPrompts.map((p) => (
           <button
             key={p}
             onClick={() => handleSend(p)}
-            className="whitespace-nowrap px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-xs font-medium text-[#9AAFA5] hover:text-white transition-colors"
+            className="px-3 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] text-[11px] font-semibold text-[#9AAFA5] hover:text-white whitespace-nowrap transition-colors"
           >
             {p}
           </button>
         ))}
       </div>
 
-      {/* Chat Input Bar */}
-      <div className="shrink-0 pt-2">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            handleSend()
-          }}
-          className="flex items-center gap-2"
+      {/* Input Bar */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          handleSend()
+        }}
+        className="flex items-center gap-2 shrink-0"
+      >
+        <input
+          type="text"
+          placeholder="Ask anything about your salary, bills, vacation budget..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          className="flex-1 h-12 px-4 rounded-2xl bg-[#0B110E] border border-white/[0.08] text-white text-xs placeholder:text-[#60756C] focus:outline-none focus:border-[#19D98A]/50 transition-colors"
+        />
+        <Button
+          type="submit"
+          disabled={!input.trim() || isTyping}
+          className="h-12 w-12 rounded-2xl bg-[#19D98A] text-[#050806] hover:bg-[#3EE8A2] p-0 flex items-center justify-center shrink-0 disabled:opacity-40"
         >
-          <Input
-            placeholder="Ask anything about your budget, savings, or spending..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="flex-1 text-sm bg-[#0B110E] border-white/[0.1] rounded-2xl h-12"
-          />
-          <Button type="submit" disabled={!input.trim()} className="h-12 px-5 rounded-2xl">
-            <Send size={16} />
-          </Button>
-        </form>
-      </div>
+          <Send size={18} />
+        </Button>
+      </form>
     </div>
   )
 }

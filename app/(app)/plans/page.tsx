@@ -8,24 +8,34 @@ import {
   CheckCircle2,
   AlertTriangle,
   Sliders,
-  ArrowRight,
   ShieldCheck,
   TrendingUp,
   RefreshCw,
+  Plus,
+  Home,
+  Zap,
+  ShoppingCart,
+  Car,
+  CreditCard,
+  HeartPulse,
+  GraduationCap,
 } from 'lucide-react'
 import { useFinancialData } from '@/lib/context/financial-context'
 import { formatMoney } from '@/lib/finance/currency'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { aggregateSpendingByCategory } from '@/lib/finance/transactions'
+import { generateMonthlyPlan } from '@/lib/finance/monthly-plan'
 
 export default function MonthlyPlansPage() {
   const {
     financialProfile,
     transactions,
+    categories,
+    familyMembers,
     currency,
-    currentMonthPlan,
     updateFinancialProfile,
   } = useFinancialData()
 
@@ -34,34 +44,56 @@ export default function MonthlyPlansPage() {
   const [utilities, setUtilities] = useState(financialProfile.utilities || 260)
   const [groceries, setGroceries] = useState(financialProfile.groceries || 700)
   const [transportation, setTransportation] = useState(financialProfile.transportation || 380)
+  const [education, setEducation] = useState(financialProfile.education || 450)
   const [debt, setDebt] = useState(financialProfile.debt || 350)
+  const [healthcare, setHealthcare] = useState(financialProfile.healthcare || 200)
+  const [personalBudget, setPersonalBudget] = useState(financialProfile.personal_budget || 450)
   const [savingsTarget, setSavingsTarget] = useState(financialProfile.savings_target || 1500)
   const [emergencyTarget, setEmergencyTarget] = useState(financialProfile.emergency_target || 500)
-  const [personalBudget, setPersonalBudget] = useState(financialProfile.personal_budget || 450)
+
   const [isSaved, setIsSaved] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
 
-  // Needs, Wants, Savings calculations
-  const totalNeeds = rent + utilities + groceries + transportation + debt
-  const totalWants = personalBudget
-  const totalSavings = savingsTarget + emergencyTarget
-  const totalAllocated = totalNeeds + totalWants + totalSavings
-  const netRemaining = salary - totalAllocated
+  // Compute live actual spending per category from actual transactions
+  const categorySpendingList = aggregateSpendingByCategory(transactions, categories)
+  const getActualForCategory = (nameQuery: string): number => {
+    const q = nameQuery.toLowerCase()
+    const found = categorySpendingList.find((c) =>
+      c.categoryName.toLowerCase().includes(q)
+    )
+    return found ? found.totalSpent : 0
+  }
 
-  const needsPct = salary > 0 ? Math.round((totalNeeds / salary) * 100) : 0
-  const wantsPct = salary > 0 ? Math.round((totalWants / salary) * 100) : 0
-  const savingsPct = salary > 0 ? Math.round((totalSavings / salary) * 100) : 0
+  // Generate dynamic 50/30/20 plan
+  const plan = generateMonthlyPlan({
+    salary,
+    rent,
+    utilities,
+    groceries,
+    transportation,
+    education,
+    healthcare,
+    debt,
+    insurance: 300,
+    personal_budget: personalBudget,
+    savings_target: savingsTarget,
+    emergency_target: emergencyTarget,
+    familyBudgets: familyMembers.map((m) => ({ name: m.name, amount: m.monthly_budget })),
+  })
 
-  // Category breakdown
-  const planCategories = [
-    { name: 'Housing & Rent', planned: rent, icon: 'Home', actual: 1800, color: '#19D98A' },
-    { name: 'Utilities & Subscriptions', planned: utilities, icon: 'Zap', actual: 145, color: '#3EE8A2' },
-    { name: 'Groceries & Living', planned: groceries, icon: 'ShoppingCart', actual: 246, color: '#63F2B0' },
-    { name: 'Transport & Fuel', planned: transportation, icon: 'Car', actual: 72, color: '#0F8C5C' },
-    { name: 'Debt & Loan Payments', planned: debt, icon: 'CreditCard', actual: 350, color: '#9AAFA5' },
-    { name: 'Personal & Lifestyle', planned: personalBudget, icon: 'Sparkles', actual: 88, color: '#10B981' },
-    { name: 'Investments & Goals', planned: savingsTarget, icon: 'TrendingUp', actual: 600, color: '#34D399' },
-    { name: 'Emergency Fund Runway', planned: emergencyTarget, icon: 'ShieldCheck', actual: 600, color: '#19D98A' },
-  ]
+  // Map real actual spending to plan categories
+  const detailedCategories = plan.categories.map((c) => {
+    const actual = getActualForCategory(c.name.split(' ')[0])
+    const remaining = Math.max(0, c.planned - actual)
+    const pctUsed = c.planned > 0 ? Math.min(100, Math.round((actual / c.planned) * 100)) : 0
+    return {
+      ...c,
+      actual,
+      remaining,
+      percentageUsed: pctUsed,
+      status: pctUsed > 100 ? 'over_budget' : pctUsed >= 80 ? 'warning' : 'healthy',
+    }
+  })
 
   const handleSavePlan = () => {
     updateFinancialProfile({
@@ -70,279 +102,279 @@ export default function MonthlyPlansPage() {
       utilities,
       groceries,
       transportation,
+      education,
+      healthcare,
       debt,
       savings_target: savingsTarget,
       emergency_target: emergencyTarget,
       personal_budget: personalBudget,
     })
     setIsSaved(true)
+    setIsEditing(false)
     setTimeout(() => setIsSaved(false), 3000)
   }
 
+  const handleResetToProfile = () => {
+    setSalary(financialProfile.monthly_salary || 7500)
+    setRent(financialProfile.rent || 1800)
+    setUtilities(financialProfile.utilities || 260)
+    setGroceries(financialProfile.groceries || 700)
+    setTransportation(financialProfile.transportation || 380)
+    setEducation(financialProfile.education || 450)
+    setDebt(financialProfile.debt || 350)
+    setHealthcare(financialProfile.healthcare || 200)
+    setPersonalBudget(financialProfile.personal_budget || 450)
+    setSavingsTarget(financialProfile.savings_target || 1500)
+    setEmergencyTarget(financialProfile.emergency_target || 500)
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto pb-10">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
             Smart Monthly Financial Plan
           </h1>
-          <p className="text-sm text-[#9AAFA5] mt-0.5">
-            Automated 50/30/20 budget framework adjusted to your real household expenses.
+          <p className="text-xs sm:text-sm text-[#9AAFA5] mt-0.5">
+            50/30/20 budget framework powered by your live income and verified expenses.
           </p>
         </div>
 
-        <Button onClick={handleSavePlan} className="self-start sm:self-auto gap-2">
-          {isSaved ? <CheckCircle2 size={16} /> : <Sparkles size={16} />}
-          <span>{isSaved ? 'Plan Updated & Locked!' : 'Update & Lock Plan'}</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsEditing(!isEditing)}
+            className="text-xs h-10 border-white/[0.1] text-[#9AAFA5] hover:text-white"
+          >
+            <Sliders size={15} className="mr-1.5" />
+            {isEditing ? 'Close Sliders' : 'Fine-Tune Plan'}
+          </Button>
+          {isEditing && (
+            <Button
+              onClick={handleSavePlan}
+              className="text-xs h-10 bg-[#19D98A] text-[#050806] font-bold hover:bg-[#3EE8A2]"
+            >
+              {isSaved ? <CheckCircle2 size={15} className="mr-1.5" /> : <Sparkles size={15} className="mr-1.5" />}
+              Save Plan
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* 50/30/20 Rule Visual Banner */}
-      <Card glow className="bg-gradient-to-br from-[#0B1510] via-[#0B110E] to-[#050806] border-[#19D98A]/25">
-        <CardContent className="p-6 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* 50/30/20 Macro Allocation Breakdown Banner */}
+      <div className="p-5 sm:p-6 rounded-[32px] bg-gradient-to-br from-[#0B1410] via-[#0B110E] to-[#050806] border border-[#19D98A]/25 relative overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div>
+            <div className="text-xs text-[#9AAFA5] font-semibold">Total Monthly Salary</div>
+            <div className="text-3xl font-black text-white mt-0.5">{formatMoney(salary, currency)}</div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs">
             <div>
-              <div className="flex items-center gap-2">
-                <Percent size={18} className="text-[#19D98A]" />
-                <h2 className="text-lg font-black text-white">Rule Allocation Health</h2>
-              </div>
-              <p className="text-xs text-[#9AAFA5] mt-1">
-                Standard: 50% Needs, 30% Wants, 20% Savings. Your customized split is calculated below.
-              </p>
+              <span className="text-[#60756C]">Total Planned:</span>{' '}
+              <span className="font-bold text-white">{formatMoney(plan.totalPlanned, currency)}</span>
             </div>
-
-            <div className="text-left sm:text-right">
-              <div className="text-xs text-[#60756C]">Unallocated Cash Cushion</div>
-              <div
-                className={`text-xl font-black ${
-                  netRemaining >= 0 ? 'text-[#19D98A]' : 'text-[#E05252]'
-                }`}
-              >
-                {formatMoney(netRemaining, currency)}
-              </div>
+            <div>
+              <span className="text-[#60756C]">Surplus:</span>{' '}
+              <span className="font-extrabold text-[#19D98A]">{formatMoney(plan.remainingAmount, currency)}</span>
             </div>
           </div>
+        </div>
 
-          {/* Tri-color Split Bar */}
-          <div className="space-y-2">
-            <div className="h-3.5 w-full bg-white/[0.08] rounded-full overflow-hidden flex">
-              <div
-                style={{ width: `${Math.min(needsPct, 100)}%` }}
-                className="bg-[#19D98A] h-full"
-                title={`Needs: ${needsPct}%`}
-              />
-              <div
-                style={{ width: `${Math.min(wantsPct, 100)}%` }}
-                className="bg-[#3EE8A2] h-full"
-                title={`Wants: ${wantsPct}%`}
-              />
-              <div
-                style={{ width: `${Math.min(savingsPct, 100)}%` }}
-                className="bg-[#63F2B0] h-full"
-                title={`Savings: ${savingsPct}%`}
-              />
-            </div>
+        {/* 50/30/20 Color Bar */}
+        <div className="h-3 w-full rounded-full bg-white/[0.06] flex overflow-hidden p-0.5 gap-1">
+          <div
+            style={{ width: `${plan.needsPercentage}%` }}
+            className="h-full rounded-full bg-[#19D98A] transition-all duration-300"
+            title={`Needs: ${plan.needsPercentage}%`}
+          />
+          <div
+            style={{ width: `${plan.wantsPercentage}%` }}
+            className="h-full rounded-full bg-[#63F2B0] transition-all duration-300"
+            title={`Wants: ${plan.wantsPercentage}%`}
+          />
+          <div
+            style={{ width: `${plan.savingsPercentage}%` }}
+            className="h-full rounded-full bg-[#0B6B45] transition-all duration-300"
+            title={`Savings: ${plan.savingsPercentage}%`}
+          />
+        </div>
 
-            <div className="grid grid-cols-3 gap-2 text-xs pt-1">
-              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                <div className="flex items-center justify-between text-[#9AAFA5]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#19D98A]" /> Needs
-                  </span>
-                  <span className="font-bold text-white">{needsPct}%</span>
-                </div>
-                <div className="font-bold text-white mt-1">{formatMoney(totalNeeds, currency)}</div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                <div className="flex items-center justify-between text-[#9AAFA5]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#3EE8A2]" /> Wants
-                  </span>
-                  <span className="font-bold text-white">{wantsPct}%</span>
-                </div>
-                <div className="font-bold text-white mt-1">{formatMoney(totalWants, currency)}</div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                <div className="flex items-center justify-between text-[#9AAFA5]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#63F2B0]" /> Savings
-                  </span>
-                  <span className="font-bold text-white">{savingsPct}%</span>
-                </div>
-                <div className="font-bold text-white mt-1">{formatMoney(totalSavings, currency)}</div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Category Breakdown: Planned vs Actuals */}
-      <Card className="bg-[#0B110E]">
-        <CardHeader className="border-b border-white/[0.04] pb-4">
-          <CardTitle className="text-base font-bold text-white">
-            Category Budget Breakdown (Planned vs Actuals)
-          </CardTitle>
-          <p className="text-xs text-[#9AAFA5]">
-            Real-time monitoring of expenses against planned targets for the current billing cycle.
-          </p>
-        </CardHeader>
-
-        <CardContent className="pt-4 space-y-4">
-          {planCategories.map((cat) => {
-            const pctUsed = cat.planned > 0 ? Math.min(100, Math.round((cat.actual / cat.planned) * 100)) : 0
-            const remaining = Math.max(0, cat.planned - cat.actual)
-            const isOver = cat.actual > cat.planned
-
-            return (
-              <div key={cat.name} className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.04] space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-sm font-bold text-white">{cat.name}</span>
-                    <Badge variant={isOver ? 'destructive' : pctUsed > 80 ? 'warning' : 'success'} className="text-[10px]">
-                      {isOver ? 'Over Budget' : pctUsed > 80 ? 'Caution' : 'On Track'}
-                    </Badge>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-sm font-bold text-white">
-                      {formatMoney(cat.actual, currency)}{' '}
-                      <span className="text-xs font-normal text-[#60756C]">
-                        / {formatMoney(cat.planned, currency)}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <Progress value={pctUsed} />
-                  <div className="flex justify-between text-[11px] text-[#60756C]">
-                    <span>{pctUsed}% utilized</span>
-                    <span>{formatMoney(remaining, currency)} remaining</span>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </CardContent>
-      </Card>
-
-      {/* Fine-tune Sliders Card */}
-      <Card className="bg-[#0B110E]">
-        <CardHeader className="border-b border-white/[0.04] pb-4">
+        {/* Legend */}
+        <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-white/[0.04] text-xs">
           <div className="flex items-center gap-2">
-            <Sliders size={18} className="text-[#19D98A]" />
-            <CardTitle className="text-base font-bold text-white">Fine-tune Monthly Targets</CardTitle>
-          </div>
-          <p className="text-xs text-[#9AAFA5]">
-            Adjust individual expense commitments to see how they impact your net monthly surplus.
-          </p>
-        </CardHeader>
-
-        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#19D98A]" />
             <div>
-              <div className="flex justify-between text-xs font-semibold mb-1.5">
+              <span className="text-white font-bold">Needs ({plan.needsPercentage}%)</span>
+              <div className="text-[10px] text-[#60756C]">{formatMoney(plan.needsTotal, currency)} (Target ≤50%)</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#63F2B0]" />
+            <div>
+              <span className="text-white font-bold">Wants ({plan.wantsPercentage}%)</span>
+              <div className="text-[10px] text-[#60756C]">{formatMoney(plan.wantsTotal, currency)} (Target ≤30%)</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#0B6B45]" />
+            <div>
+              <span className="text-white font-bold">Savings ({plan.savingsPercentage}%)</span>
+              <div className="text-[10px] text-[#60756C]">{formatMoney(plan.savingsTotal, currency)} (Target ≥20%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Interactive Fine-Tuning Sliders (when editing) */}
+      {isEditing && (
+        <div className="p-6 rounded-3xl bg-[#0B110E] border border-[#19D98A]/30 space-y-5 animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sliders size={18} className="text-[#19D98A]" />
+              <h3 className="text-sm font-bold text-white">Fine-Tune Monthly Allocations</h3>
+            </div>
+            <button
+              onClick={handleResetToProfile}
+              className="text-xs text-[#9AAFA5] hover:text-white flex items-center gap-1"
+            >
+              <RefreshCw size={13} /> Reset
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            {/* Rent */}
+            <div className="space-y-1.5 p-3 rounded-2xl bg-white/[0.02]">
+              <div className="flex justify-between">
                 <span className="text-[#9AAFA5]">Housing / Rent</span>
-                <span className="text-white font-bold">{formatMoney(rent, currency)}</span>
+                <span className="font-bold text-white">{formatMoney(rent, currency)}</span>
               </div>
               <input
                 type="range"
-                min="500"
-                max="5000"
+                min="0"
+                max={salary}
                 step="50"
                 value={rent}
-                onChange={(e) => setRent(Number(e.target.value))}
-                className="w-full accent-[#19D98A] cursor-pointer"
+                onChange={(e) => setRent(parseFloat(e.target.value))}
+                className="w-full accent-[#19D98A] h-1.5 bg-white/[0.08] rounded cursor-pointer"
               />
             </div>
 
-            <div>
-              <div className="flex justify-between text-xs font-semibold mb-1.5">
-                <span className="text-[#9AAFA5]">Groceries & Supermarket</span>
-                <span className="text-white font-bold">{formatMoney(groceries, currency)}</span>
+            {/* Groceries */}
+            <div className="space-y-1.5 p-3 rounded-2xl bg-white/[0.02]">
+              <div className="flex justify-between">
+                <span className="text-[#9AAFA5]">Groceries</span>
+                <span className="font-bold text-white">{formatMoney(groceries, currency)}</span>
               </div>
               <input
                 type="range"
-                min="200"
-                max="2500"
-                step="25"
+                min="0"
+                max={salary * 0.5}
+                step="50"
                 value={groceries}
-                onChange={(e) => setGroceries(Number(e.target.value))}
-                className="w-full accent-[#19D98A] cursor-pointer"
+                onChange={(e) => setGroceries(parseFloat(e.target.value))}
+                className="w-full accent-[#19D98A] h-1.5 bg-white/[0.08] rounded cursor-pointer"
               />
             </div>
 
-            <div>
-              <div className="flex justify-between text-xs font-semibold mb-1.5">
-                <span className="text-[#9AAFA5]">Transportation</span>
-                <span className="text-white font-bold">{formatMoney(transportation, currency)}</span>
+            {/* Utilities */}
+            <div className="space-y-1.5 p-3 rounded-2xl bg-white/[0.02]">
+              <div className="flex justify-between">
+                <span className="text-[#9AAFA5]">Utilities</span>
+                <span className="font-bold text-white">{formatMoney(utilities, currency)}</span>
               </div>
               <input
                 type="range"
-                min="50"
-                max="1500"
+                min="0"
+                max={salary * 0.3}
                 step="25"
-                value={transportation}
-                onChange={(e) => setTransportation(Number(e.target.value))}
-                className="w-full accent-[#19D98A] cursor-pointer"
+                value={utilities}
+                onChange={(e) => setUtilities(parseFloat(e.target.value))}
+                className="w-full accent-[#19D98A] h-1.5 bg-white/[0.08] rounded cursor-pointer"
               />
             </div>
-          </div>
 
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs font-semibold mb-1.5">
+            {/* Savings */}
+            <div className="space-y-1.5 p-3 rounded-2xl bg-white/[0.02]">
+              <div className="flex justify-between">
                 <span className="text-[#9AAFA5]">Savings Target</span>
-                <span className="text-white font-bold">{formatMoney(savingsTarget, currency)}</span>
+                <span className="font-bold text-[#19D98A]">{formatMoney(savingsTarget, currency)}</span>
               </div>
               <input
                 type="range"
-                min="100"
-                max="5000"
+                min="0"
+                max={salary * 0.6}
                 step="50"
                 value={savingsTarget}
-                onChange={(e) => setSavingsTarget(Number(e.target.value))}
-                className="w-full accent-[#19D98A] cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs font-semibold mb-1.5">
-                <span className="text-[#9AAFA5]">Emergency Fund Target</span>
-                <span className="text-white font-bold">{formatMoney(emergencyTarget, currency)}</span>
-              </div>
-              <input
-                type="range"
-                min="50"
-                max="2000"
-                step="25"
-                value={emergencyTarget}
-                onChange={(e) => setEmergencyTarget(Number(e.target.value))}
-                className="w-full accent-[#19D98A] cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs font-semibold mb-1.5">
-                <span className="text-[#9AAFA5]">Personal & Lifestyle</span>
-                <span className="text-white font-bold">{formatMoney(personalBudget, currency)}</span>
-              </div>
-              <input
-                type="range"
-                min="50"
-                max="2000"
-                step="25"
-                value={personalBudget}
-                onChange={(e) => setPersonalBudget(Number(e.target.value))}
-                className="w-full accent-[#19D98A] cursor-pointer"
+                onChange={(e) => setSavingsTarget(parseFloat(e.target.value))}
+                className="w-full accent-[#19D98A] h-1.5 bg-white/[0.08] rounded cursor-pointer"
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
+
+      {/* Categories Detailed Allocation Table/List */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-bold text-white px-1">Planned Categories Ledger</h2>
+
+        <div className="rounded-3xl bg-[#0B110E] border border-white/[0.06] divide-y divide-white/[0.04] overflow-hidden">
+          {detailedCategories.map((cat) => (
+            <div key={cat.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3.5 flex-1">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-xs shrink-0"
+                  style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
+                >
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white">{cat.name}</span>
+                    <span className="text-[10px] text-[#60756C] px-1.5 py-0.2 rounded bg-white/[0.04]">
+                      {cat.percentageOfIncome}% of salary
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#9AAFA5] mt-0.5">
+                    Planned: {formatMoney(cat.planned, currency)} • Spent: {formatMoney(cat.actual, currency)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress & Remaining */}
+              <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-64">
+                <div className="w-32 space-y-1">
+                  <div className="flex justify-between text-[10px] font-semibold">
+                    <span className="text-[#60756C]">Utilized</span>
+                    <span
+                      className={
+                        cat.status === 'over_budget'
+                          ? 'text-[#E05252]'
+                          : cat.status === 'warning'
+                          ? 'text-[#EAB308]'
+                          : 'text-[#19D98A]'
+                      }
+                    >
+                      {cat.percentageUsed}%
+                    </span>
+                  </div>
+                  <Progress value={cat.percentageUsed} className="h-1.5" />
+                </div>
+
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-bold text-white">
+                    {formatMoney(cat.remaining, currency)}
+                  </div>
+                  <div className="text-[10px] text-[#60756C]">Remaining</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

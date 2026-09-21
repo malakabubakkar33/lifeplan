@@ -16,15 +16,17 @@ import {
   CheckCircle2,
   Trash2,
   DollarSign,
+  Briefcase,
 } from 'lucide-react'
 import { useFinancialData } from '@/lib/context/financial-context'
 import { formatMoney } from '@/lib/finance/currency'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { processGoals, calculateEmergencyFundRunway } from '@/lib/finance/goals'
 
 export default function GoalsPage() {
   const {
@@ -32,7 +34,6 @@ export default function GoalsPage() {
     financialProfile,
     currency,
     userProfile,
-    emergencyFundMonths,
     addSavingsGoal,
     contributeToGoal,
     deleteSavingsGoal,
@@ -50,20 +51,39 @@ export default function GoalsPage() {
   const [icon, setIcon] = useState('Target')
   const [notes, setNotes] = useState('')
 
+  const now = new Date()
+  const processedGoals = processGoals(savingsGoals, now)
+
+  // Emergency runway benchmark
+  const fixedMonthly =
+    Number(financialProfile.rent || 0) +
+    Number(financialProfile.utilities || 0) +
+    Number(financialProfile.debt || 0) +
+    Number(financialProfile.insurance || 0) +
+    Number(financialProfile.groceries || 0)
+
+  const emergencyGoal = savingsGoals.find((g) => g.id === 'goal_1') || savingsGoals[0]
+  const emergencyAmount = emergencyGoal ? emergencyGoal.current_amount : 18400
+  const runway = calculateEmergencyFundRunway(emergencyAmount, fixedMonthly)
+
+  const totalSavedAcrossGoals = savingsGoals.reduce((sum, g) => sum + g.current_amount, 0)
+  const totalTargetAcrossGoals = savingsGoals.reduce((sum, g) => sum + g.target_amount, 0)
+
   const handleCreateGoal = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!goalName || !targetAmount) return
+    const target = parseFloat(targetAmount)
+    if (!goalName.trim() || !target || target <= 0) return
 
     addSavingsGoal({
       clerk_user_id: userProfile.clerk_user_id,
-      name: goalName,
-      target_amount: parseFloat(targetAmount),
+      name: goalName.trim(),
+      target_amount: target,
       current_amount: parseFloat(currentAmount) || 0,
       deadline: deadline || null,
       icon,
       color: '#19D98A',
       status: 'active',
-      notes: notes || null,
+      notes: notes.trim() || null,
     })
 
     setGoalName('')
@@ -84,273 +104,201 @@ export default function GoalsPage() {
     }
   }
 
-  const emergencyGoal = savingsGoals.find((g) => g.id === 'goal_1')
-  const otherGoals = savingsGoals.filter((g) => g.id !== 'goal_1')
-
-  const totalSavedAllGoals = savingsGoals.reduce((sum, g) => sum + g.current_amount, 0)
-  const totalTargetAllGoals = savingsGoals.reduce((sum, g) => sum + g.target_amount, 0)
+  const presets = [
+    { name: 'Emergency Fund', icon: 'ShieldCheck', target: fixedMonthly * 6 },
+    { name: 'Family Vacation', icon: 'Plane', target: 4500 },
+    { name: 'Vehicle Downpayment', icon: 'Car', target: 10000 },
+    { name: 'House Downpayment', icon: 'Home', target: 50000 },
+    { name: 'Child University Fund', icon: 'GraduationCap', target: 30000 },
+    { name: 'Business Startup Vault', icon: 'Briefcase', target: 20000 },
+  ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto pb-10">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Savings Goals & Emergency Runway
+            Savings & Financial Goals
           </h1>
-          <p className="text-sm text-[#9AAFA5] mt-0.5">
-            Turn future aspirations into automated milestone targets.
+          <p className="text-xs sm:text-sm text-[#9AAFA5] mt-0.5">
+            Lock in milestones, track emergency runway, and automate monthly contributions.
           </p>
         </div>
 
-        <Button onClick={() => setIsAddOpen(true)} className="self-start sm:self-auto gap-2">
+        <Button
+          onClick={() => setIsAddOpen(true)}
+          className="self-start sm:self-auto gap-2 bg-[#19D98A] text-[#050806] font-bold hover:bg-[#3EE8A2]"
+        >
           <Plus size={16} />
-          <span>New Savings Goal</span>
+          <span>New Goal Vault</span>
         </Button>
       </div>
 
-      {/* Emergency Fund Highlight Banner */}
-      {emergencyGoal && (
-        <Card glow className="bg-gradient-to-br from-[#0B1510] via-[#0B110E] to-[#050806] border-[#19D98A]/30">
-          <CardContent className="p-6">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-              <div className="space-y-3 max-w-xl">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-[#19D98A] text-[#050806] flex items-center justify-center font-bold shadow-[0_0_20px_rgba(25,217,138,0.3)]">
-                    <ShieldCheck size={22} strokeWidth={2.5} />
+      {/* Emergency Fund Benchmark Banner */}
+      <div className="p-6 rounded-[32px] bg-gradient-to-br from-[#0B1410] via-[#0B110E] to-[#050806] border border-[#19D98A]/25 relative overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#063B28] to-[#19D98A] flex items-center justify-center text-[#050806] font-black shrink-0 shadow-[0_0_20px_rgba(25,217,138,0.3)]">
+              <ShieldCheck size={30} strokeWidth={2.5} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-black text-white">Emergency Fund Health</h3>
+                <Badge variant="default" className="text-[10px]">
+                  {runway.healthStatus.toUpperCase()}
+                </Badge>
+              </div>
+              <p className="text-xs text-[#9AAFA5] mt-0.5">
+                Benchmark: 6 months of fixed living essentials ({formatMoney(fixedMonthly, currency)}/mo).
+              </p>
+            </div>
+          </div>
+
+          <div className="text-left sm:text-right">
+            <div className="text-xs text-[#60756C]">Liquid Buffer Horizon</div>
+            <div className="text-2xl font-black text-[#19D98A] mt-0.5">
+              {runway.runwayMonths} Months Safe
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-6 pt-5 border-t border-white/[0.04]">
+          <div className="p-3 rounded-2xl bg-white/[0.02]">
+            <div className="text-[10px] text-[#60756C]">Current Reserve</div>
+            <div className="text-sm font-bold text-white mt-0.5">{formatMoney(emergencyAmount, currency)}</div>
+          </div>
+          <div className="p-3 rounded-2xl bg-white/[0.02]">
+            <div className="text-[10px] text-[#60756C]">6-Mo Target</div>
+            <div className="text-sm font-bold text-white mt-0.5">{formatMoney(fixedMonthly * 6, currency)}</div>
+          </div>
+          <div className="p-3 rounded-2xl bg-white/[0.02]">
+            <div className="text-[10px] text-[#60756C]">All Vaults Total</div>
+            <div className="text-sm font-bold text-[#19D98A] mt-0.5">{formatMoney(totalSavedAcrossGoals, currency)}</div>
+          </div>
+          <div className="p-3 rounded-2xl bg-white/[0.02]">
+            <div className="text-[10px] text-[#60756C]">Monthly Deposit</div>
+            <div className="text-sm font-bold text-[#63F2B0] mt-0.5">
+              +{formatMoney(financialProfile.emergency_target || 500, currency)}/mo
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Goal Vaults List */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-bold text-white px-1">Active Goal Vaults</h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {processedGoals.map((goal) => (
+            <div
+              key={goal.id}
+              className="p-5 rounded-3xl bg-[#0B110E] border border-white/[0.06] hover:border-white/[0.12] transition-all space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#19D98A]/10 text-[#19D98A] flex items-center justify-center font-bold">
+                    <Target size={20} />
                   </div>
                   <div>
-                    <h2 className="text-xl font-black text-white tracking-tight">
-                      {emergencyGoal.name}
-                    </h2>
-                    <p className="text-xs text-[#9AAFA5]">
-                      Liquid living reserve safely shielded against sudden shocks
+                    <h3 className="text-sm font-bold text-white">{goal.name}</h3>
+                    <p className="text-[10px] text-[#60756C]">
+                      Target: {formatMoney(goal.target_amount, currency)}
+                      {goal.deadline && ` • Due ${goal.deadline}`}
                     </p>
                   </div>
                 </div>
 
-                <p className="text-xs text-[#9AAFA5] leading-relaxed">
-                  Based on your monthly fixed requirements (
-                  {formatMoney(
-                    (financialProfile.rent || 0) +
-                      (financialProfile.utilities || 0) +
-                      (financialProfile.groceries || 0) +
-                      (financialProfile.debt || 0),
-                    currency
-                  )}
-                  /mo), your current balance provides a{' '}
-                  <span className="text-[#19D98A] font-bold">{emergencyFundMonths} months</span> safety cushion.
-                </p>
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-white font-bold">
-                      {formatMoney(emergencyGoal.current_amount, currency)}{' '}
-                      <span className="text-[#60756C] font-normal">
-                        of {formatMoney(emergencyGoal.target_amount, currency)}
-                      </span>
-                    </span>
-                    <span className="text-[#19D98A]">
-                      {Math.round((emergencyGoal.current_amount / emergencyGoal.target_amount) * 100)}%
-                    </span>
-                  </div>
-                  <Progress
-                    value={Math.round((emergencyGoal.current_amount / emergencyGoal.target_amount) * 100)}
-                  />
+                <div className="flex items-center gap-1">
+                  <Button
+                    onClick={() => setDepositGoalId(goal.id)}
+                    className="text-xs h-8 px-3 bg-[#19D98A] text-[#050806] font-bold hover:bg-[#3EE8A2]"
+                  >
+                    + Add Money
+                  </Button>
+                  <button
+                    onClick={() => deleteSavingsGoal(goal.id)}
+                    className="p-1.5 text-[#60756C] hover:text-[#E05252] transition-colors"
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <Button
-                  onClick={() => setDepositGoalId(emergencyGoal.id)}
-                  className="gap-2 shadow-[0_4px_20px_rgba(25,217,138,0.3)]"
-                >
-                  <DollarSign size={16} />
-                  Deposit to Emergency Fund
-                </Button>
+              {/* Progress Bar & Math */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-[#9AAFA5]">{formatMoney(goal.current_amount, currency)} funded</span>
+                  <span className="font-bold text-[#19D98A]">{goal.percentageProgress}%</span>
+                </div>
+                <Progress value={goal.percentageProgress} className="h-2" />
+              </div>
+
+              <div className="pt-3 border-t border-white/[0.04] flex items-center justify-between text-xs text-[#9AAFA5]">
+                <span>Required monthly:</span>
+                <span className="font-bold text-white">
+                  {formatMoney(goal.monthlyContributionRequired, currency)} / mo
+                </span>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Overview Tally Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="bg-[#0B110E]">
-          <CardContent className="p-5">
-            <div className="text-xs font-semibold text-[#60756C]">Total Capital Accumulated</div>
-            <div className="text-2xl font-black text-[#19D98A] mt-1">
-              {formatMoney(totalSavedAllGoals, currency)}
-            </div>
-            <p className="text-[11px] text-[#9AAFA5] mt-1">Across {savingsGoals.length} goal vaults</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-[#0B110E]">
-          <CardContent className="p-5">
-            <div className="text-xs font-semibold text-[#60756C]">Cumulative Target Cap</div>
-            <div className="text-2xl font-black text-white mt-1">
-              {formatMoney(totalTargetAllGoals, currency)}
-            </div>
-            <p className="text-[11px] text-[#9AAFA5] mt-1">Long-term objective total</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-[#0B110E]">
-          <CardContent className="p-5">
-            <div className="text-xs font-semibold text-[#60756C]">Monthly Target Inflow</div>
-            <div className="text-2xl font-black text-[#63F2B0] mt-1">
-              {formatMoney(financialProfile.savings_target || 1800, currency)}
-            </div>
-            <p className="text-[11px] text-[#9AAFA5] mt-1">From regular cash flow allocation</p>
-          </CardContent>
-        </Card>
+          ))}
+        </div>
       </div>
-
-      {/* Active Goals Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {otherGoals.map((goal) => {
-          const pct = Math.min(100, Math.round((goal.current_amount / goal.target_amount) * 100))
-          const remaining = Math.max(0, goal.target_amount - goal.current_amount)
-
-          return (
-            <Card key={goal.id} className="bg-[#0B110E] hover:border-white/20 transition-all flex flex-col justify-between">
-              <CardHeader className="pb-3 flex flex-row items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-[#19D98A]/10 text-[#19D98A] flex items-center justify-center font-bold">
-                    <Target size={22} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-white text-base leading-tight">{goal.name}</h3>
-                    {goal.deadline && (
-                      <div className="flex items-center gap-1 text-[11px] text-[#60756C] mt-1">
-                        <Calendar size={11} /> Target: {goal.deadline}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => deleteSavingsGoal(goal.id)}
-                  className="p-1.5 text-[#60756C] hover:text-[#E05252] hover:bg-[#E05252]/10 rounded-lg transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </CardHeader>
-
-              <CardContent className="space-y-4 pt-0">
-                {goal.notes && (
-                  <p className="text-xs text-[#9AAFA5] bg-white/[0.02] p-2.5 rounded-xl border border-white/[0.04] leading-relaxed">
-                    {goal.notes}
-                  </p>
-                )}
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-white font-bold">
-                      {formatMoney(goal.current_amount, currency)}{' '}
-                      <span className="text-[#60756C] font-normal">
-                        / {formatMoney(goal.target_amount, currency)}
-                      </span>
-                    </span>
-                    <span className="text-[#19D98A]">{pct}%</span>
-                  </div>
-                  <Progress value={pct} />
-                  <div className="text-[11px] text-[#60756C] flex justify-between pt-1">
-                    <span>{formatMoney(remaining, currency)} remaining</span>
-                    <span>{pct >= 100 ? '🎉 Goal Achieved!' : 'In Progress'}</span>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => setDepositGoalId(goal.id)}
-                  variant="secondary"
-                  className="w-full text-xs font-bold gap-2"
-                >
-                  <DollarSign size={14} className="text-[#19D98A]" />
-                  Add Funds
-                </Button>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Deposit Modal */}
-      <Dialog open={!!depositGoalId} onOpenChange={(open) => !open && setDepositGoalId(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Contribute to Goal</DialogTitle>
-            <DialogDescription>
-              Record an allocation into this savings vault from your monthly funds.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div>
-              <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">
-                Contribution Amount ({currency})
-              </label>
-              <Input
-                type="number"
-                placeholder="e.g. 250"
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-                autoFocus
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDepositGoalId(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleDeposit} disabled={!depositAmount || parseFloat(depositAmount) <= 0}>
-              Confirm Allocation
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Add Goal Modal */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="bg-[#0B110E] border-white/[0.1] text-white">
           <DialogHeader>
-            <DialogTitle>Create New Savings Goal</DialogTitle>
-            <DialogDescription>
-              Set up a milestone target with target date and planned savings amount.
-            </DialogDescription>
+            <DialogTitle>Create New Savings Goal Vault</DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleCreateGoal} className="space-y-4 py-2">
+            {/* Quick Presets */}
             <div>
-              <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">Goal Title</label>
+              <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">Quick Presets</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {presets.map((p) => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    onClick={() => {
+                      setGoalName(p.name)
+                      setTargetAmount(p.target.toString())
+                      setIcon(p.icon)
+                    }}
+                    className="p-2 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-[#19D98A]/40 text-[10px] text-left text-[#9AAFA5] hover:text-white transition-colors"
+                  >
+                    <div className="font-bold text-white truncate">{p.name}</div>
+                    <div className="text-[#19D98A]">{formatMoney(p.target, currency)}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">Goal Title</label>
               <Input
-                required
-                placeholder="e.g. Vacation in Tokyo, Home Downpayment"
+                placeholder="e.g. Electric Vehicle Upgrade, Japan Trip"
                 value={goalName}
                 onChange={(e) => setGoalName(e.target.value)}
+                required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">
-                  Target Amount ({currency})
-                </label>
+                <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">Target Amount ({currency})</label>
                 <Input
                   type="number"
-                  required
-                  placeholder="5000"
+                  placeholder="10000"
                   value={targetAmount}
                   onChange={(e) => setTargetAmount(e.target.value)}
+                  required
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">
-                  Starting Balance ({currency})
-                </label>
+                <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">Starting Balance</label>
                 <Input
                   type="number"
                   placeholder="0"
@@ -361,9 +309,7 @@ export default function GoalsPage() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">
-                Target Deadline (Optional)
-              </label>
+              <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">Target Completion Date</label>
               <Input
                 type="date"
                 value={deadline}
@@ -372,23 +318,53 @@ export default function GoalsPage() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-[#9AAFA5] block mb-2">
-                Notes / Motivation (Optional)
-              </label>
+              <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">Notes (Optional)</label>
               <Input
-                placeholder="e.g. Planned for family anniversary in autumn"
+                placeholder="Why is this milestone important?"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
 
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
+            <DialogFooter className="gap-2 pt-2">
+              <Button variant="outline" type="button" onClick={() => setIsAddOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Create Goal</Button>
+              <Button type="submit">Create Vault</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deposit Modal */}
+      <Dialog open={Boolean(depositGoalId)} onOpenChange={(open) => !open && setDepositGoalId(null)}>
+        <DialogContent className="bg-[#0B110E] border-white/[0.1] text-white">
+          <DialogHeader>
+            <DialogTitle>Deposit into Savings Vault</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-xs text-[#9AAFA5]">
+              Allocate funds into this vault. Your goal balance will automatically update.
+            </p>
+            <div>
+              <label className="text-xs font-semibold text-[#9AAFA5] block mb-1.5">
+                Deposit Amount ({currency})
+              </label>
+              <Input
+                type="number"
+                placeholder="500.00"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDepositGoalId(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleDeposit}>Confirm Deposit</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
